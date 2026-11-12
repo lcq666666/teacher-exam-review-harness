@@ -12,7 +12,7 @@
   header h1 { margin-top: 0; margin-bottom: 6px; font-size: 22px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.3; }
   header p { margin-top: 0; margin-bottom: 4px; font-size: 13px; line-height: 1.7; color: #6b7280; }
   main { max-width: 960px; margin: 0 auto; padding: 20px 16px 60px; }
-  .steps { display: flex; gap: 4px; margin: 0 0 20px; padding: 6px; background: #fff; border: 1px solid #e8e8ea; border-radius: 16px; box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04); flex-wrap: wrap; }
+  .steps { display: flex; gap: 4px; margin: 0 0 20px; padding: 6px; background: #fff; border: 1px solid #e8e8ea; border-radius: 16px; box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04); flex-wrap: wrap; position: sticky; top: 12px; z-index: 10; }
   .step { flex: 1; min-width: 110px; background: transparent; border: 1px solid transparent; border-radius: 12px; padding: 10px 12px; font-size: 14px; font-weight: 500; letter-spacing: -0.1px; color: #6b7280; transition: background 200ms ease, color 200ms ease; }
   .step b { display: block; font-size: 11px; color: #9ca3af; font-weight: 500; letter-spacing: 0.02em; margin-bottom: 2px; }
   .step.active { background: #171719; color: #fff; }
@@ -27,7 +27,8 @@
   button:hover { background: #000; }
   button.secondary { background: #f1f2f4; color: #171719; }
   button.secondary:hover { background: #e5e7eb; }
-  button.small { min-height: 32px; padding: 0 12px; font-size: 12px; border-radius: 8px; }
+  button.small { min-height: 32px; padding: 0 12px; font-size: 12px; border-radius: 8px; background: #fff; border: 1px solid #e5e7eb; color: #171719; }
+  button.small:hover { background: #f1f2f4; }
   button:disabled { opacity: .45; cursor: default; }
   button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid rgba(37, 99, 235, 0.4); outline-offset: 1px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -39,7 +40,7 @@
   .badge.warn { background: #fee2e2; color: #b91c1c; }
   .bar { height: 8px; background: #f0f0f2; border-radius: 9999px; overflow: hidden; min-width: 80px; }
   .bar i { display: block; height: 100%; background: #2563eb; border-radius: 9999px; }
-  .outline-item { border: 1px solid #e8e8ea; border-radius: 16px; padding: 16px 18px; margin-bottom: 12px; background: #fff; box-shadow: 0 1px 3px rgba(16, 24, 40, 0.03); }
+  .outline-item { border: 1px solid #e8e8ea; border-radius: 16px; padding: 16px 18px; margin-bottom: 12px; background: #f8f9fb; box-shadow: 0 1px 3px rgba(16, 24, 40, 0.03); }
   .outline-item h4 { margin: 0 0 6px; font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
   .outline-item p { margin: 4px 0; font-size: 13px; line-height: 1.7; color: #374151; }
   .rowbtns { float: right; }
@@ -47,7 +48,7 @@
   textarea:focus { border-color: #2563eb; outline: none; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15); }
   #exportText { min-height: 220px; }
   .hidden { display: none; }
-  .warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.7; margin: 10px 0; }
+  .warn { background: #eff6ff; border: 1px solid #dbeafe; color: #1e40af; border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.7; margin: 10px 0; }
   .issue { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 12px; padding: 10px 14px; font-size: 13px; line-height: 1.7; margin: 6px 0; }
   .issue.block { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
   .audit { font-size: 12px; color: #6b7280; line-height: 1.7; }
@@ -532,6 +533,14 @@ function recordUpload(label, nStudents, nQuestions, nRows) {
   renderUploads();
 }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+// 演示词库里有的知识点显示中文名（如 92 号 · 一次函数应用），没有的只显示编号。
+function skillName(s) {
+  try {
+    const bank = window.__kcTagger && window.__kcTagger.DEMO_BANK;
+    const e = bank && bank.find(x => x.id === s + 1);
+    return e ? ` · ${e.name}` : '';
+  } catch (err) { return ''; }
+}
 
 // ---------- CSV helpers (pure) ----------
 function splitCSVLine(line) {
@@ -911,7 +920,7 @@ document.getElementById('toStage3').addEventListener('click', () => {
   html += `<h3>每题正确率（从低到高）</h3><table><tr><th>题号</th><th>知识点</th><th>做过人数</th><th>正确率</th></tr>`;
   st.byQ.forEach(x => { html += `<tr><td>第 ${x.q} 题</td><td>${kcMap[x.q] || '—'} 号</td><td>${x.n}</td><td>${(x.acc * 100).toFixed(0)}%</td></tr>`; });
   html += `</table><h3>每知识点正确率</h3><table><tr><th>知识点</th><th>作答数</th><th>正确率</th></tr>`;
-  st.byS.forEach(x => { html += `<tr><td>${x.s + 1} 号</td><td>${x.n}</td><td>${(x.acc * 100).toFixed(0)}%</td></tr>`; });
+  st.byS.forEach(x => { html += `<tr><td>${x.s + 1} 号${skillName(x.s)}</td><td>${x.n}</td><td>${(x.acc * 100).toFixed(0)}%</td></tr>`; });
   html += '</table>';
   document.getElementById('statsOut').innerHTML = html;
   show('stage3'); setStep(3);
@@ -924,9 +933,9 @@ document.getElementById('toStage4').addEventListener('click', () => {
   order.slice(0, 15).forEach(s => {
     const ev = testedN[s] >= 3;
     const topQ = Object.entries(missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([q, n]) => `第 ${q} 题（${n}人错）`).join('、') || '—';
-    html += `<tr><td>${s + 1} 号</td><td>${mastery[s].toFixed(2)}</td>
+    html += `<tr><td>${s + 1} 号${skillName(s)}</td><td>${mastery[s].toFixed(2)}</td>
       <td><div class="bar"><i style="width:${Math.round(mastery[s] * 100)}%"></i></div></td>
-      <td><span class="badge ${ev ? 'ev' : 'inf'}">${ev ? '有证据' : '推断'}</span> ${testedN[s] | 0} 人次</td>
+      <td><span class="badge ${ev ? 'ev' : 'inf'}">${ev ? '有证据' : '推断'}</span> ${testedN[s] ? (testedN[s] | 0) + ' 人次' : '本次未考'}</td>
       <td>${testedN[s] ? (testedC[s] / testedN[s] * 100).toFixed(0) + '%' : '未考'}</td>
       <td>${topQ}</td></tr>`;
   });
@@ -965,7 +974,7 @@ function renderOutline() {
       <span class="rowbtns"><button class="small secondary" onclick="moveItem(${idx},-1)">上移</button>
       <button class="small secondary" onclick="moveItem(${idx},1)">下移</button>
       <button class="small secondary" onclick="delItem(${idx})">删</button></span>
-      <h4>${idx + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${s + 1} 号知识点</h4>
+      <h4>${idx + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${s + 1} 号${skillName(s)}知识点</h4>
       <p>掌握度 ${it.mastery.toFixed(2)} · ${acc}</p>
       <p>错题示例：${topQ}</p>
       <p class="muted">${it.kind === '讲' ? '建议：先讲概念，再讲错题，最后变式练一道。' : '建议：这次先不讲，下次考试出题覆盖这个知识点。'}</p>
