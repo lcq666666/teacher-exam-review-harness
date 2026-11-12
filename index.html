@@ -19,7 +19,6 @@
   --border-subtle: #efe9d6;
   --primary: #1f2937;
   --primary-fg: #fdfbf3;
-  --accent: var(--step);
   --s1: #c2410c;
   --s2: #eab308;
   --s3: #4d7c0f;
@@ -84,7 +83,6 @@
     --border-subtle: rgba(255, 255, 255, 0.07);
     --primary: #f5f5f5;
     --primary-fg: #171719;
-    --accent: var(--step);
     --s1: #c2410c;
     --s2: #eab308;
     --s3: #4d7c0f;
@@ -153,7 +151,7 @@ button.secondary { background: var(--surface); color: var(--fg); border: 1px sol
 button.secondary:hover { background: var(--surface-muted); filter: none; }
 button.small { min-height: 32px; padding: 0 12px; font-size: var(--text-xs); border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border-strong); color: var(--fg); }
 button.small:hover { background: var(--surface-muted); }
-button:disabled { opacity: .45; cursor: default; }
+button:disabled { background: var(--surface-muted); color: var(--muted); opacity: 1; cursor: default; }
 button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--step); outline-offset: 1px; }
 table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 th, td { border-bottom: 1px solid var(--border-subtle); padding: 10px 8px; text-align: left; }
@@ -186,7 +184,7 @@ input[type=file] { font-size: var(--text-sm); color: var(--muted-2); }
 input[type=file]::file-selector-button { background: var(--surface-muted); color: var(--fg); border: 0; border-radius: var(--radius-md); min-height: 36px; padding: 0 14px; font-size: var(--text-sm); font-weight: 600; cursor: pointer; margin-right: 10px; }
 #ocrText { min-height: 160px; }
 .progress { height: 6px; background: var(--border-subtle); border-radius: var(--radius-full); margin: 0 0 20px; overflow: hidden; }
-.progress i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: var(--radius-full); transition: width 90ms steps(2, end); }
+.progress i { display: block; height: 100%; width: 0; background: var(--step); border-radius: var(--radius-full); transition: width 90ms steps(2, end); }
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--step); border-radius: 50%; vertical-align: -2px; margin-right: 6px; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
@@ -263,7 +261,7 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
 <header>
   <h1>教师讲评助手 · v3</h1>
   <p>上传成绩表 → 试卷处理 → 统计 → 诊断 → 讲评提纲。每步跑完停下等老师确认。单文件，数据不出本机。</p>
-  <p>试卷 OCR 默认用 PaddleOCR（浏览器内跑，第一次用要联网下载模型，之后缓存），打不开时自动换 Tesseract.js；也可以直接上传题目与知识点对应表，跳过 OCR。诊断逻辑与实验报告一致（ESCT 式轻量复现，α=0.3，β=0.5，λ=0.4）。</p>
+  <p>试卷 OCR 默认用 PaddleOCR（浏览器内跑，第一次用要联网下载模型，之后缓存），打不开时自动换 Tesseract.js；也可以直接上传题目与知识点对应表，跳过 OCR。诊断逻辑与<span style="white-space: nowrap">实验报告一致</span>（ESCT 式轻量复现，α=0.3，β=0.5，λ=0.4）。</p>
 </header>
 <main>
   <div class="shell">
