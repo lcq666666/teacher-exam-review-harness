@@ -6,48 +6,65 @@
 <title>教师讲评助手 · v1</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; background: #f4f5f7; color: #222; }
-  header { background: #1f3a5f; color: #fff; padding: 20px 24px; }
-  header h1 { margin: 0 0 6px; font-size: 22px; }
-  header p { margin: 0; font-size: 13px; opacity: .85; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; background: #f5f6f8; color: #171719; -webkit-font-smoothing: antialiased; }
+  header { background: #fff; border-bottom: 1px solid #e8e8ea; padding: 24px 16px 20px; }
+  header h1, header p { max-width: 960px; margin-left: auto; margin-right: auto; }
+  header h1 { margin-top: 0; margin-bottom: 6px; font-size: 22px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.3; }
+  header p { margin-top: 0; margin-bottom: 4px; font-size: 13px; line-height: 1.7; color: #6b7280; }
   main { max-width: 960px; margin: 0 auto; padding: 20px 16px 60px; }
-  .steps { display: flex; gap: 8px; margin: 0 0 20px; flex-wrap: wrap; }
-  .step { flex: 1; min-width: 110px; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 10px 12px; font-size: 14px; }
-  .step b { display: block; font-size: 13px; color: #888; font-weight: normal; }
-  .step.active { border-color: #1f3a5f; box-shadow: 0 0 0 2px #1f3a5f22; }
-  .step.done { border-color: #2e7d32; }
-  .step.done b { color: #2e7d32; }
-  .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 18px; margin-bottom: 16px; }
-  .card h2 { margin: 0 0 10px; font-size: 17px; }
-  .card h3 { margin: 18px 0 8px; font-size: 15px; }
-  .muted { color: #666; font-size: 13px; }
-  button { background: #1f3a5f; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font-size: 14px; cursor: pointer; }
-  button.secondary { background: #e8ebef; color: #222; }
-  button.small { padding: 4px 10px; font-size: 12px; }
+  .steps { display: flex; gap: 4px; margin: 0 0 20px; padding: 6px; background: #fff; border: 1px solid #e8e8ea; border-radius: 16px; box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04); flex-wrap: wrap; }
+  .step { flex: 1; min-width: 110px; background: transparent; border: 1px solid transparent; border-radius: 12px; padding: 10px 12px; font-size: 14px; font-weight: 500; letter-spacing: -0.1px; color: #6b7280; transition: background 200ms ease, color 200ms ease; }
+  .step b { display: block; font-size: 11px; color: #9ca3af; font-weight: 500; letter-spacing: 0.02em; margin-bottom: 2px; }
+  .step.active { background: #171719; color: #fff; }
+  .step.active b { color: rgba(255, 255, 255, 0.6); }
+  .step.done { background: #eff6ff; color: #1d4ed8; }
+  .step.done b { color: #60a5fa; }
+  .card { background: #fff; border: 1px solid #e8e8ea; border-radius: 20px; padding: 24px 28px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(16, 24, 40, 0.03), 0 8px 24px -12px rgba(16, 24, 40, 0.08); }
+  .card h2 { margin: 0 0 10px; font-size: 20px; font-weight: 600; letter-spacing: -0.5px; line-height: 1.4; }
+  .card h3 { margin: 20px 0 8px; font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+  .muted { color: #6b7280; font-size: 13px; line-height: 1.7; }
+  button { background: #171719; color: #fff; border: 0; border-radius: 10px; min-height: 44px; padding: 0 20px; font-size: 14px; font-weight: 600; letter-spacing: -0.1px; cursor: pointer; transition: background 200ms ease, opacity 200ms ease; }
+  button:hover { background: #000; }
+  button.secondary { background: #f1f2f4; color: #171719; }
+  button.secondary:hover { background: #e5e7eb; }
+  button.small { min-height: 32px; padding: 0 12px; font-size: 12px; border-radius: 8px; }
   button:disabled { opacity: .45; cursor: default; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { border-bottom: 1px solid #eee; padding: 6px 8px; text-align: left; }
-  th { color: #666; font-weight: normal; }
-  .badge { display: inline-block; font-size: 11px; border-radius: 10px; padding: 1px 8px; }
-  .badge.ev { background: #e3f2e5; color: #2e7d32; }
-  .badge.inf { background: #fff3e0; color: #b26a00; }
-  .badge.warn { background: #fce4ec; color: #b71c1c; }
-  .bar { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; min-width: 80px; }
-  .bar i { display: block; height: 100%; background: #1f3a5f; }
-  .outline-item { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 10px; background: #fff; }
-  .outline-item h4 { margin: 0 0 6px; font-size: 15px; }
-  .outline-item p { margin: 4px 0; font-size: 13px; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid rgba(37, 99, 235, 0.4); outline-offset: 1px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { border-bottom: 1px solid #f0f0f2; padding: 10px 8px; text-align: left; }
+  th { color: #6b7280; font-weight: 500; font-size: 11px; letter-spacing: 0.02em; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 9999px; padding: 2px 9px; }
+  .badge.ev { background: #dcfce7; color: #15803d; }
+  .badge.inf { background: #ffedd5; color: #c2410c; }
+  .badge.warn { background: #fee2e2; color: #b91c1c; }
+  .bar { height: 8px; background: #f0f0f2; border-radius: 9999px; overflow: hidden; min-width: 80px; }
+  .bar i { display: block; height: 100%; background: #2563eb; border-radius: 9999px; }
+  .outline-item { border: 1px solid #e8e8ea; border-radius: 16px; padding: 16px 18px; margin-bottom: 12px; background: #fff; box-shadow: 0 1px 3px rgba(16, 24, 40, 0.03); }
+  .outline-item h4 { margin: 0 0 6px; font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+  .outline-item p { margin: 4px 0; font-size: 13px; line-height: 1.7; color: #374151; }
   .rowbtns { float: right; }
-  textarea { width: 100%; min-height: 90px; }
+  textarea { width: 100%; min-height: 90px; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.7; font-family: inherit; }
+  textarea:focus { border-color: #2563eb; outline: none; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15); }
   #exportText { min-height: 220px; }
   .hidden { display: none; }
-  .warn { background: #fff8e1; border: 1px solid #f0d48a; border-radius: 6px; padding: 10px 12px; font-size: 13px; margin: 10px 0; }
-  .issue { background: #fff8e1; border: 1px solid #f0d48a; border-radius: 6px; padding: 8px 12px; font-size: 13px; margin: 6px 0; }
-  .issue.block { background: #fce4ec; border-color: #ef9a9a; }
-  .audit { font-size: 12px; color: #666; }
-  .audit li { margin: 2px 0; }
-  input[type=text], input[type=number] { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+  .warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.7; margin: 10px 0; }
+  .issue { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 12px; padding: 10px 14px; font-size: 13px; line-height: 1.7; margin: 6px 0; }
+  .issue.block { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+  .audit { font-size: 12px; color: #6b7280; line-height: 1.7; }
+  .audit li { margin: 4px 0; }
+  input[type=text], input[type=number] { height: 40px; padding: 0 12px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 14px; font-family: inherit; }
+  input[type=text]:focus, input[type=number]:focus { border-color: #2563eb; outline: none; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15); }
+  input[type=file] { font-size: 13px; color: #6b7280; }
+  input[type=file]::file-selector-button { background: #f1f2f4; color: #171719; border: 0; border-radius: 10px; min-height: 36px; padding: 0 14px; font-size: 13px; font-weight: 600; cursor: pointer; margin-right: 10px; }
   #ocrText { min-height: 160px; }
+  @media (max-width: 640px) {
+    .card { padding: 20px; border-radius: 16px; }
+    .step { min-width: 0; font-size: 12px; padding: 8px; }
+    header { padding: 20px 16px 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
 </style>
 </head>
 <body>
