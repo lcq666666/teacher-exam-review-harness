@@ -162,8 +162,8 @@ textarea:focus { border-color: var(--red); outline: 2px solid var(--red); outlin
 .issue.block { background: var(--error-bg); border-color: var(--error-border); color: var(--error-fg); }
 .audit { font-size: var(--text-xs); color: var(--muted); line-height: var(--leading-body); }
 .audit li { margin: 4px 0; }
-input[type=text], input[type=number] { height: 40px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); font-size: var(--text-body); font-family: inherit; background: var(--surface); color: var(--fg); caret-color: var(--red); }
-input[type=text]:focus, input[type=number]:focus { border-color: var(--red); outline: 2px solid var(--red); outline-offset: 1px; }
+input[type=text], input[type=number], input[type=password] { height: 40px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); font-size: var(--text-body); font-family: inherit; background: var(--surface); color: var(--fg); caret-color: var(--red); }
+input[type=text]:focus, input[type=number]:focus, input[type=password]:focus { border-color: var(--red); outline: 2px solid var(--red); outline-offset: 1px; }
 input[type=file] { font-size: var(--text-sm); color: var(--muted-2); }
 input[type=file]::file-selector-button { background: var(--surface-muted); color: var(--fg); border: 0; border-radius: var(--radius-md); min-height: 36px; padding: 0 14px; font-size: var(--text-sm); font-weight: 600; cursor: pointer; margin-right: 10px; }
 #ocrText { min-height: 160px; }
@@ -258,9 +258,13 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
 
   <div class="card" id="stage1">
     <h2>第 1 步 · 上传成绩表</h2>
-    <p class="muted">宽表，老师登分用的样子：第一列学号，第二列姓名，之后每列一道题，列名写成“第 N 题（X 分）”标明满分；最后一列总分可有可无。支持 Excel（.xlsx）和 CSV。得分进诊断前先转成对错：得满分算对，否则算错；空白格不算 0 分。</p>
+    <p class="muted">宽表，老师登分用的样子：第一列学号，第二列姓名，之后每列一道题，列名写成“第 N 题（X 分）”标明满分；最后一列总分可有可无。支持 Excel（.xlsx）和 CSV。得分按比例进诊断：得 4/5 分算 0.8，满分算对，0 分算错；空白格不算 0 分。</p>
     <div class="dropzone" id="gradeDrop" aria-label="上传成绩表：把文件拖到这里，或按回车点选文件"><input type="file" id="gradeFile" accept=".csv,.xlsx,.xls" aria-label="上传成绩表"><span>把成绩表拖到这里，或点选文件</span></div>
     <p><button id="demoBtn" class="secondary">加载模拟数据（30 名学生 × 10 道题，模拟成绩表 + 对应表）</button></p>
+    <h3>或者：从 Excel 粘贴</h3>
+    <p class="muted">从 Excel 里复制成绩表（Ctrl+C），粘贴到下面，点“解析粘贴内容”。支持宽表和长表；列名写成“第 N 题（5 分）”最稳妥，只写“第 N 题”也能认，满分按本列最高分推断。列名对应关系会记下来，下次粘贴同一张表不用再认。</p>
+    <textarea id="pasteBox" aria-label="粘贴成绩表" placeholder="从 Excel 复制后粘贴到这里"></textarea>
+    <p><button id="pasteBtn" class="secondary">解析粘贴内容</button></p>
     <div id="uploadMsg" class="muted"></div>
     <div id="issuesOut"></div>
     <p><button id="toStage2" disabled>确认成绩表，进入试卷处理</button></p>
@@ -503,6 +507,211 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
 </script>
 <script>
+// llm_tagger.js
+// 知识点自动标注模块（LLM 版，BYOK：老师自己填 Key）
+// 用途：教师讲评助手里，试卷处理步骤的“知识点标注”技能的第二种实现。
+// 与 kc_tagger.js（关键词匹配）同一套返回形状：
+//   tagQuestionsLLM 返回 {tagged: [{qid, ranked: [{skill, confidence}]}], errors: []}，
+// 下游（拆题表的预填 + 置信度提示）不用改。
+// 每条 tagged 带 source：'llm' 是模型标的，'keyword' 是调不通时关键词补位的，
+// 备注里写清来源，老师确认时知道这条是谁标的。
+// 关键约定：
+//   - 只调老师自己填的 OpenAI 兼容接口（默认 OpenRouter），Key 只存在这台浏览器里；
+//   - 模型只从老师给的知识点库里挑编号，绝不自己编；
+//   - 某一批调不通时，用关键词标注补位，不让老师卡住；
+//   - 纯 JS：不 import、不 require、不碰 DOM，Node 和浏览器都能直接用。
+
+(function () {
+  'use strict';
+
+  var DEFAULT_BATCH = 10;
+  var DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
+  var DEFAULT_MODEL = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
+
+  // 校验知识点 id：必须是 1-123 的整数（与诊断引擎的技能空间一致）。
+  function isValidId(id) {
+    return typeof id === 'number' && Number.isInteger(id) && id >= 1 && id <= 123;
+  }
+
+  // buildPrompt(questions, bank)：把题干 + 知识点库拼成一段中文提示词。
+  // bank 条目 {id, name}；questions [{qid, stem}]。
+  // 提示词只要求返回 JSON 数组，不写任何其他文字。
+  function buildPrompt(questions, bank) {
+    var lines = [];
+    lines.push('你是中学数学老师，负责给考试题标注知识点。');
+    lines.push('知识点库（编号：名称）：');
+    bank.forEach(function (e) {
+      lines.push(e.id + '：' + (e.name || ''));
+    });
+    lines.push('题目：');
+    questions.forEach(function (q) {
+      lines.push(q.qid + '. ' + (q.stem || ''));
+    });
+    lines.push('只返回 JSON 数组，不要写任何其他文字，格式：[{"qid":1,"skill":56,"confidence":0.8,"reason":"题干比较两个分数的大小"}]');
+    lines.push('规则：skill 必须是上面知识点库里的编号，不能自己编；confidence 是 0 到 1 的数，不确定就给低分；每道题都要标。');
+    return lines.join('\n');
+  }
+
+  // 从模型返回里抠 JSON：先整段解析，再找 ```json 围栏，再找首尾方括号。
+  function extractJsonArray(text) {
+    if (typeof text !== 'string') return null;
+    var t = text.trim();
+    try { return JSON.parse(t); } catch (e) {}
+    var fenced = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenced) {
+      try { return JSON.parse(fenced[1].trim()); } catch (e) {}
+    }
+    var start = t.indexOf('[');
+    var end = t.lastIndexOf(']');
+    if (start >= 0 && end > start) {
+      try { return JSON.parse(t.slice(start, end + 1)); } catch (e) {}
+    }
+    return null;
+  }
+
+  // parseResponse(text, questions, bank)：校验模型返回，返回 {tags, errors}。
+  // tags: [{qid, skill, confidence, reason}]；errors: [string]。
+  // 规则：qid 必须对得上某道题；skill 必须在库里；confidence 不是有限数就丢掉这条；
+  // 同一道题出现多次只留第一条；顺序跟输入的题目顺序一致。
+  function parseResponse(text, questions, bank) {
+    var tags = [];
+    var errors = [];
+    var arr = extractJsonArray(text);
+    if (!Array.isArray(arr)) {
+      return { tags: tags, errors: ['模型返回里没找到 JSON 数组'] };
+    }
+    var qids = {};
+    questions.forEach(function (q) { qids[String(q.qid)] = true; });
+    var bankIds = {};
+    bank.forEach(function (e) { if (isValidId(e.id)) bankIds[e.id] = true; });
+    var seen = {};
+    arr.forEach(function (item) {
+      if (!item || typeof item !== 'object') { errors.push('跳过一条不是对象的标注'); return; }
+      var qid = item.qid;
+      if (qid === undefined || qid === null || !qids[String(qid)]) {
+        errors.push('跳过一条题号对不上的标注：' + JSON.stringify(item).slice(0, 80));
+        return;
+      }
+      if (seen[String(qid)]) return;
+      var skill = item.skill;
+      if (!isValidId(skill) || !bankIds[skill]) {
+        errors.push('第 ' + qid + ' 题标的知识点 ' + skill + ' 不在库里，已跳过');
+        return;
+      }
+      var conf = item.confidence;
+      if (typeof conf !== 'number' || !isFinite(conf)) {
+        errors.push('第 ' + qid + ' 题没有给出置信度，已跳过');
+        return;
+      }
+      seen[String(qid)] = true;
+      tags.push({
+        qid: qid,
+        skill: skill,
+        confidence: Math.min(1, Math.max(0, conf)),
+        reason: typeof item.reason === 'string' ? item.reason : ''
+      });
+    });
+    // 按输入题目顺序排
+    var order = {};
+    questions.forEach(function (q, i) { order[String(q.qid)] = i; });
+    tags.sort(function (a, b) { return order[String(a.qid)] - order[String(b.qid)]; });
+    return { tags: tags, errors: errors };
+  }
+
+  // tagQuestionsLLM(questions, bank, opts)：分批调 OpenAI 兼容的 /chat/completions。
+  // opts: {fetchFn, baseUrl, apiKey, model, batchSize, fallback}
+  //   fetchFn: (url, init) => Promise<response>，response 带 ok/status/json()；
+  //   fallback: function (questions, bank) => [{qid, ranked}]，某一批失败时补位（一般传关键词标注）。
+  // 返回 Promise<{tagged: [{qid, ranked: [{skill, confidence}]}], errors: []}>。
+  // ranked 的形状与 kc_tagger.tagQuestions 一致，下游不用改。
+  async function tagQuestionsLLM(questions, bank, opts) {
+    opts = opts || {};
+    var errors = [];
+    var tagged = [];
+    if (!Array.isArray(questions) || questions.length === 0) return { tagged: tagged, errors: errors };
+    if (!Array.isArray(bank) || bank.length === 0) {
+      return { tagged: questions.map(function (q) { return { qid: q.qid, ranked: [] }; }), errors: ['知识点库是空的，没法标注'] };
+    }
+    var apiKey = typeof opts.apiKey === 'string' ? opts.apiKey.trim() : '';
+    if (!apiKey) {
+      return { tagged: questions.map(function (q) { return { qid: q.qid, ranked: [] }; }), errors: ['没有填 API Key'] };
+    }
+    var model = typeof opts.model === 'string' ? opts.model.trim() : '';
+    if (!model) {
+      return { tagged: questions.map(function (q) { return { qid: q.qid, ranked: [] }; }), errors: ['没有填模型'] };
+    }
+    var baseUrl = (typeof opts.baseUrl === 'string' && opts.baseUrl.trim()) ? opts.baseUrl.trim().replace(/\/+$/, '') : DEFAULT_BASE_URL;
+    var fetchFn = opts.fetchFn;
+    if (typeof fetchFn !== 'function') {
+      return { tagged: questions.map(function (q) { return { qid: q.qid, ranked: [] }; }), errors: ['这台浏览器调不通网络接口'] };
+    }
+    var batchSize = opts.batchSize > 0 ? Math.floor(opts.batchSize) : DEFAULT_BATCH;
+    var fallback = typeof opts.fallback === 'function' ? opts.fallback : null;
+
+    function fallbackBatch(batch) {
+      if (fallback) {
+        try {
+          return fallback(batch, bank).map(function (t) {
+            return { qid: t.qid, ranked: t.ranked, source: 'keyword' };
+          });
+        } catch (e) { errors.push('关键词补位也失败了：' + (e.message || e)); }
+      }
+      return batch.map(function (q) { return { qid: q.qid, ranked: [] }; });
+    }
+
+    for (var i = 0; i < questions.length; i += batchSize) {
+      var batch = questions.slice(i, i + batchSize);
+      try {
+        var res = await fetchFn(baseUrl + '/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+          body: JSON.stringify({
+            model: model,
+            temperature: 0,
+            messages: [{ role: 'user', content: buildPrompt(batch, bank) }]
+          })
+        });
+        if (!res || !res.ok) {
+          errors.push('第 ' + (i / batchSize + 1) + ' 批调用失败（HTTP ' + (res ? res.status : '无响应') + '），已用关键词标注补位');
+          tagged = tagged.concat(fallbackBatch(batch));
+          continue;
+        }
+        var data = await res.json();
+        var content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        if (typeof content !== 'string' || !content.trim()) {
+          errors.push('第 ' + (i / batchSize + 1) + ' 批模型没返回文字，已用关键词标注补位');
+          tagged = tagged.concat(fallbackBatch(batch));
+          continue;
+        }
+        var parsed = parseResponse(content, batch, bank);
+        parsed.errors.forEach(function (e) { errors.push(e); });
+        var byQid = {};
+        parsed.tags.forEach(function (t) { byQid[String(t.qid)] = t; });
+        batch.forEach(function (q) {
+          var t = byQid[String(q.qid)];
+          if (t) tagged.push({ qid: q.qid, ranked: [{ skill: t.skill, confidence: t.confidence }], source: 'llm' });
+          else tagged.push({ qid: q.qid, ranked: [] });
+        });
+      } catch (e) {
+        errors.push('第 ' + (i / batchSize + 1) + ' 批调用出错（' + (e.message || e) + '），已用关键词标注补位');
+        tagged = tagged.concat(fallbackBatch(batch));
+      }
+    }
+    return { tagged: tagged, errors: errors };
+  }
+
+  globalThis.__llmTagger = {
+    buildPrompt: buildPrompt,
+    parseResponse: parseResponse,
+    tagQuestionsLLM: tagQuestionsLLM,
+    DEFAULT_BATCH: DEFAULT_BATCH,
+    DEFAULT_BASE_URL: DEFAULT_BASE_URL,
+    DEFAULT_MODEL: DEFAULT_MODEL
+  };
+})();
+
+</script>
+<script>
 /* 讲评提纲 Word 导出模块
  * 纯 JS，不依赖第三方包，不碰 DOM，可在 Node 和浏览器里直接用。
  * 生成 Word 能直接打开的 HTML 格式 .doc 文档。
@@ -545,7 +754,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     var parts = [];
     parts.push('<h3>' + escapeHtml(skill) + ' 号知识点</h3>');
     parts.push('<p>掌握度：' + escapeHtml(formatMastery(item && item.mastery)) + '</p>');
-    parts.push('<p>班级正确率：' + escapeHtml(formatAcc(item && item.acc)) + '</p>');
+    parts.push('<p>班级得分率：' + escapeHtml(formatAcc(item && item.acc)) + '</p>');
     parts.push('<p>错题示例：' + escapeHtml(topQ) + '</p>');
     parts.push('<p>' + escapeHtml(adviceFor(kind)) + '</p>');
     return parts.join('\n');
@@ -743,6 +952,68 @@ function skillName(s) {
     return e ? ` · ${e.name}` : '';
   } catch (err) { return ''; }
 }
+// 标注结果填进拆题表（关键词和 LLM 共用）：预填知识点编号，备注里写置信度。
+function applyTagged(tagged, bank, source) {
+  const inputs = document.querySelectorAll('#splitOut input[data-qi]');
+  const notes = document.querySelectorAll('#splitOut span[data-tag-qi]');
+  let low = 0, filled = 0;
+  tagged.forEach((t, i) => {
+    const top = t.ranked[0];
+    const note = notes[i];
+    if (!top) { if (note) note.textContent = '没标上，请手动填'; low++; return; }
+    const entry = bank.find(e => e.id === top.skill);
+    // 备注写清来源：LLM 标的写 LLM，调不通改用关键词补位的写关键词。
+    const src = t.source ? (t.source === 'keyword' ? '关键词' : 'LLM') : source;
+    if (note) note.textContent = `${top.skill} 号 · ${entry ? entry.name : ''}（置信度 ${top.confidence.toFixed(2)}${top.confidence < 0.5 ? '，建议确认' : ''}${src ? '，' + src : ''}）`;
+    if (top.confidence < 0.5) low++;
+    if (inputs[i] && !inputs[i].value) { inputs[i].value = top.skill; filled++; }
+  });
+  return { low, filled };
+}
+// LLM 用的知识点库：演示词库 + 已上传对应表里的知识点（名称能显示的显示）。
+function buildLLMBank() {
+  const bank = [];
+  const seen = {};
+  const demo = (window.__kcTagger && window.__kcTagger.DEMO_BANK) || [];
+  demo.forEach(e => { bank.push({ id: e.id, name: e.name }); seen[e.id] = true; });
+  if (kcMap) Object.values(kcMap).forEach(id => {
+    if (!seen[id]) { bank.push({ id, name: (skillName(id - 1) || '').replace(/^ · /, '') }); seen[id] = true; }
+  });
+  return bank.sort((a, b) => a.id - b.id);
+}
+// LLM 设置存在浏览器本地：接口地址、模型、Key（只存在这台浏览器里）。
+let llmSettings = { baseUrl: '', apiKey: '', model: '' };
+function loadLLMSettings() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const s = JSON.parse(localStorage.getItem('examReviewLLM') || '{}');
+      if (s && typeof s === 'object') llmSettings = { baseUrl: s.baseUrl || '', apiKey: s.apiKey || '', model: s.model || '' };
+    }
+  } catch (e) {}
+  if (!llmSettings.baseUrl) llmSettings.baseUrl = (window.__llmTagger && window.__llmTagger.DEFAULT_BASE_URL) || 'https://openrouter.ai/api/v1';
+  if (!llmSettings.model) llmSettings.model = (window.__llmTagger && window.__llmTagger.DEFAULT_MODEL) || '';
+}
+function saveLLMSettings(s) {
+  llmSettings = s;
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem('examReviewLLM', JSON.stringify(s)); } catch (e) {}
+}
+function readLLMSettingsFromForm() {
+  const v = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  return {
+    baseUrl: v('llmBaseUrl') || llmSettings.baseUrl,
+    apiKey: v('llmKey') || '',
+    model: v('llmModel') || llmSettings.model
+  };
+}
+function runKeywordTag(qs) {
+  if (!window.__kcTagger) { document.getElementById('kcMsg').innerHTML = '标注模块没加载上，请刷新页面再试。'; return null; }
+  const bank = window.__kcTagger.buildKCBank(window.__kcTagger.DEMO_BANK);
+  const tagged = window.__kcTagger.tagQuestions(qs, bank);
+  const res = applyTagged(tagged, bank, '关键词');
+  document.getElementById('kcMsg').innerHTML = `自动标注完成：${res.filled} 道题已预填知识点，${res.low} 道置信度低或没标上，请逐题确认后再点“用这份对应关系”。`;
+  logAudit(`自动标注知识点：预填 ${res.filled} 道，${res.low} 道待确认`);
+  return res;
+}
 
 // ---------- CSV helpers (pure) ----------
 function splitCSVLine(line) {
@@ -762,19 +1033,77 @@ function splitCSVLine(line) {
 function parseCSVText(text) {
   return text.split(/\r?\n/).filter(l => l.trim() !== '').map(splitCSVLine);
 }
+// 粘贴解析（纯函数）：Excel 复制过来是 Tab 分隔，文本编辑器里是逗号分隔。
+// 按首行判断分隔符，返回 grid（行数组）；分隔符之外的内容原样保留。
+function parsePastedTable(text) {
+  const lines = String(text || '').split(/\r?\n/).filter(l => l.trim() !== '');
+  if (!lines.length) return { grid: [], delimiter: 'none' };
+  const first = lines[0];
+  const nTab = (first.match(/\t/g) || []).length;
+  const nComma = (first.match(/,/g) || []).length;
+  if (nTab > 0 && nTab >= nComma) {
+    return { grid: lines.map(l => l.split('\t').map(x => x.trim())), delimiter: 'tab' };
+  }
+  return { grid: parseCSVText(text), delimiter: 'csv' };
+}
+// 列名映射记忆（纯函数）：{表头原文: {qid, full, inferred}}，存在浏览器本地。
+// 下次粘贴同一张表时，表头不用再认。inferred 表示满分是推断的，每次都要提示核对。
+function rememberColMap(map, header, qCols) {
+  const out = Object.assign({}, map || {});
+  (qCols || []).forEach(q => {
+    const h = header[q.col];
+    if (h) out[h] = { qid: q.qid, full: q.full, inferred: !!q.inferred };
+  });
+  return out;
+}
+function loadColMap() {
+  try {
+    if (typeof localStorage === 'undefined') return {};
+    const m = JSON.parse(localStorage.getItem('examReviewColMap') || '{}');
+    return (m && typeof m === 'object') ? m : {};
+  } catch (e) { return {}; }
+}
+function saveColMap(map) {
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem('examReviewColMap', JSON.stringify(map)); } catch (e) {}
+}
 
 // ---------- wide gradebook (pure) ----------
-function parseWideGradebook(text) {
-  const grid = parseCSVText(text);
+function parseWideGradebook(text, colMap) {
+  return parseWideGradebookGrid(parseCSVText(text), colMap);
+}
+function parseWideGradebookGrid(grid, colMap) {
+  colMap = colMap || {};
   const issues = [];
-  if (grid.length < 2) return { students: [], questions: [], issues: [{ type: 'block', msg: '表里没有数据行。' }] };
+  if (grid.length < 2) return { students: [], questions: [], issues: [{ type: 'block', msg: '表里没有数据行。' }], header: grid[0] || [], qCols: [] };
   const header = grid[0];
   const qCols = [];
+  const seenQid = new Set();
   for (let c = 2; c < header.length; c++) {
-    const m = header[c].match(/第\s*(\d+)\s*题[（(](\d+)\s*分[)）]/);
-    if (m) qCols.push({ col: c, qid: +m[1], full: +m[2] });
+    const h = header[c];
+    if (!h) continue;
+    const m = h.match(/第\s*(\d+)\s*题[（(](\d+)\s*分[)）]/);
+    if (m) { qCols.push({ col: c, qid: +m[1], full: +m[2], inferred: false }); seenQid.add(+m[1]); continue; }
+    const remembered = colMap[h];
+    if (remembered && remembered.qid) {
+      if (seenQid.has(remembered.qid)) { issues.push({ type: 'warn', msg: `“${h}”对应的第 ${remembered.qid} 题已经有一列了，这列已跳过。` }); continue; }
+      qCols.push({ col: c, qid: remembered.qid, full: remembered.full || 5, inferred: !!remembered.inferred });
+      seenQid.add(remembered.qid);
+      if (remembered.inferred) issues.push({ type: 'warn', msg: `第 ${remembered.qid} 题满分按上次的推断 ${remembered.full || 5} 分算，请核对。` });
+      continue;
+    }
+    const loose = h.match(/第?\s*(\d+)\s*题/) || h.match(/^Q\s*(\d+)$/i) || h.match(/^(\d+)$/);
+    if (loose) {
+      const qid = +loose[1];
+      if (seenQid.has(qid)) { issues.push({ type: 'warn', msg: `“${h}”对应的第 ${qid} 题已经有一列了，这列已跳过。` }); continue; }
+      let colMax = 0;
+      for (let r = 1; r < grid.length; r++) { const v = Number((grid[r][c] || '').trim()); if (!isNaN(v) && v > colMax) colMax = v; }
+      if (colMax <= 0) { issues.push({ type: 'warn', msg: `第 ${qid} 题没有得分，已跳过。` }); continue; }
+      qCols.push({ col: c, qid, full: colMax, inferred: true });
+      seenQid.add(qid);
+      issues.push({ type: 'warn', msg: `第 ${qid} 题满分没写，按本列最高分 ${colMax} 分算，请核对。` });
+    }
   }
-  if (!qCols.length) return { students: [], questions: [], issues: [{ type: 'block', msg: '没认出题目列：列名要写成“第 N 题（X 分）”的样子。' }] };
+  if (!qCols.length) return { students: [], questions: [], issues: [{ type: 'block', msg: '没认出题目列：列名要写成“第 N 题（X 分）”的样子。' }], header, qCols: [] };
   const questions = qCols.map(q => ({ qid: q.qid, full: q.full }));
   const students = [];
   const seen = new Set();
@@ -796,7 +1125,7 @@ function parseWideGradebook(text) {
     }
     students.push({ id: sid, name, scores, total, hasScore });
   }
-  return { students, questions, issues };
+  return { students, questions, issues, header, qCols };
 }
 function parseKCMap(text) {
   const grid = parseCSVText(text);
@@ -828,23 +1157,27 @@ function normalizeToLong(gradebook, kcMap) {
       if (v === null || v === undefined) { skippedBlank++; continue; }
       const skill = kcMap[q.qid];
       if (!skill) { skippedNoKC++; continue; }
-      rows.push({ student: st.id, q: String(q.qid), s: skill - 1, y: v === q.full ? 1 : 0 });
+      // 部分得分：得分按比例进诊断（4/5 分算 0.8），满分算对，0 分算错。
+      rows.push({ student: st.id, q: String(q.qid), s: skill - 1, y: q.full > 0 ? Math.min(1, Math.max(0, v / q.full)) : 0 });
     }
   }
   return { rows, skippedNoKC, skippedBlank };
 }
 function computeStats(rows) {
   const byQ = {};
-  rows.forEach(r => { byQ[r.q] = byQ[r.q] || { n: 0, c: 0 }; byQ[r.q].n++; byQ[r.q].c += r.y; });
+  rows.forEach(r => { byQ[r.q] = byQ[r.q] || { n: 0, c: 0, sum: 0 }; byQ[r.q].n++; if (r.y === 1) byQ[r.q].c++; byQ[r.q].sum += r.y; });
   const byS = {};
-  rows.forEach(r => { byS[r.s] = byS[r.s] || { n: 0, c: 0 }; byS[r.s].n++; byS[r.s].c += r.y; });
+  rows.forEach(r => { byS[r.s] = byS[r.s] || { n: 0, c: 0, sum: 0 }; byS[r.s].n++; if (r.y === 1) byS[r.s].c++; byS[r.s].sum += r.y; });
+  // acc 是平均得分率（得分/满分的均值），fullRate 是满分率（得满分的比例）。
+  // 只有满分和 0 分的表上两者相等；有部分得分时平均得分率高于满分率。
   const acc = rows.length ? rows.reduce((a, r) => a + r.y, 0) / rows.length : 0;
+  const fullRate = rows.length ? rows.filter(r => r.y === 1).length / rows.length : 0;
   return {
     nStudents: new Set(rows.map(r => r.student)).size,
     nQuestions: Object.keys(byQ).length,
-    nRows: rows.length, acc,
-    byQ: Object.entries(byQ).map(([q, v]) => ({ q, n: v.n, acc: v.c / v.n })).sort((a, b) => a.acc - b.acc),
-    byS: Object.entries(byS).map(([s, v]) => ({ s: +s, n: v.n, acc: v.c / v.n })).sort((a, b) => a.acc - b.acc)
+    nRows: rows.length, acc, fullRate,
+    byQ: Object.entries(byQ).map(([q, v]) => ({ q, n: v.n, acc: v.sum / v.n, fullRate: v.c / v.n })).sort((a, b) => a.acc - b.acc),
+    byS: Object.entries(byS).map(([s, v]) => ({ s: +s, n: v.n, acc: v.sum / v.n, fullRate: v.c / v.n })).sort((a, b) => a.acc - b.acc)
   };
 }
 function diagnoseStudent(events) {
@@ -879,7 +1212,8 @@ function diagnoseClass(rows) {
     for (let s = 0; s < NSKILL; s++) masterySum[s] += m[s];
     evs.forEach(r => {
       testedN[r.s]++; testedC[r.s] += r.y;
-      if (!r.y) { missQ[r.s] = missQ[r.s] || {}; missQ[r.s][r.q] = (missQ[r.s][r.q] || 0) + 1; }
+      // “错”指没得满分：部分得分（4/5 分）也算在这道题上丢了分。
+      if (r.y < 1) { missQ[r.s] = missQ[r.s] || {}; missQ[r.s][r.q] = (missQ[r.s][r.q] || 0) + 1; }
     });
   });
   const nStu = Object.keys(byStudent).length;
@@ -900,13 +1234,13 @@ function buildSummary(st) {
     { label: '学生', value: String(st.nStudents) },
     { label: '题目', value: String(st.nQuestions) },
     { label: '作答', value: String(st.nRows) },
-    { label: '整体正确率', value: (st.acc * 100).toFixed(1) + '%' },
+    { label: '整体正确率', value: (st.fullRate * 100).toFixed(1) + '%' },
   ];
 }
 
 // expose pure core for Node testing
-if (typeof window !== 'undefined') window.__core = { parseWideGradebook, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, MODEL };
-if (typeof globalThis !== 'undefined') globalThis.__core = { parseWideGradebook, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, MODEL };
+if (typeof window !== 'undefined') window.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, MODEL };
+if (typeof globalThis !== 'undefined') globalThis.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, MODEL };
 
 function renderIssues(issues) {
   const el = document.getElementById('issuesOut');
@@ -915,42 +1249,66 @@ function renderIssues(issues) {
     `<div class="issue ${i.type === 'block' ? 'block' : ''}">${i.type === 'block' ? '要先处理：' : '注意：'}${esc(i.msg)}</div>`
   ).join('');
 }
+function applyGradebook(gb, label) {
+  const blocked = gb.issues.filter(i => i.type === 'block');
+  const nBlank = gb.issues.filter(i => i.msg.includes('是空的')).length;
+  let nRows = 0;
+  gb.students.forEach(st => { gb.questions.forEach(q => { if (st.scores[q.qid] !== null && st.scores[q.qid] !== undefined) nRows++; }); });
+  document.getElementById('uploadMsg').innerHTML =
+    `已载入 ${label}：${gb.students.length} 名学生，${gb.questions.length} 道题。` +
+    (nBlank ? `其中 ${nBlank} 个空已按“不算 0 分”处理。` : '');
+  renderIssues(gb.issues);
+  document.getElementById('toStage2').disabled = blocked.length > 0 || gb.students.length === 0;
+  recordUpload(label, gb.students.length, gb.questions.length, nRows);
+  logAudit(`载入成绩表：${gb.students.length} 名学生，${gb.questions.length} 道题，${gb.issues.length} 条提示`);
+}
+// 长表兼容：student,question,skill,correct（M1 原型格式，correct 只取 0/1）。
+function loadLongTableText(text, label) {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  rows = [];
+  const stuSet = new Set(), qSet = new Set();
+  for (const line of lines) {
+    const p = line.split(',').map(x => x.trim());
+    if (p.length < 4 || isNaN(+p[3])) continue;
+    const s = +p[2] - 1, y = +p[3];
+    if (s < 0 || s >= NSKILL || (y !== 0 && y !== 1)) continue;
+    rows.push({ student: p[0], q: p[1], s, y });
+    stuSet.add(p[0]); qSet.add(p[1]);
+  }
+  gradebook = { students: [...stuSet].map(id => ({ id, name: id, scores: {}, total: 0, hasScore: true })), questions: [...qSet].map(q => ({ qid: q, full: 1 })), issues: [] };
+  document.getElementById('uploadMsg').innerHTML = `已载入 ${label}（长表）：${rows.length} 条作答，${stuSet.size} 名学生，${qSet.size} 道题。`;
+  document.getElementById('toStage2').disabled = rows.length === 0;
+  renderIssues([]);
+  recordUpload(label + '（长表）', stuSet.size, qSet.size, rows.length);
+  logAudit(`载入成绩表（长表）：${rows.length} 条作答`);
+}
 function loadGradebookText(text, label) {
   const first = (text.split(/\r?\n/)[0] || '').toLowerCase();
-  if (first.includes('student')) {
-    // 长表兼容：student,question,skill,correct
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    rows = [];
-    const stuSet = new Set(), qSet = new Set();
-    for (const line of lines) {
-      const p = line.split(',').map(x => x.trim());
-      if (p.length < 4 || isNaN(+p[3])) continue;
-      const s = +p[2] - 1, y = +p[3];
-      if (s < 0 || s >= NSKILL || (y !== 0 && y !== 1)) continue;
-      rows.push({ student: p[0], q: p[1], s, y });
-      stuSet.add(p[0]); qSet.add(p[1]);
-    }
-    gradebook = { students: [...stuSet].map(id => ({ id, name: id, scores: {}, total: 0, hasScore: true })), questions: [...qSet].map(q => ({ qid: q, full: 1 })), issues: [] };
-    document.getElementById('uploadMsg').innerHTML = `已载入 ${label}（长表）：${rows.length} 条作答，${stuSet.size} 名学生，${qSet.size} 道题。`;
-    document.getElementById('toStage2').disabled = rows.length === 0;
-    renderIssues([]);
-    recordUpload(label + '（长表）', stuSet.size, qSet.size, rows.length);
-    logAudit(`载入成绩表（长表）：${rows.length} 条作答`);
+  if (first.includes('student')) { loadLongTableText(text, label); return; }
+  const colMap = loadColMap();
+  gradebook = parseWideGradebook(text, colMap);
+  saveColMap(rememberColMap(colMap, gradebook.header || [], gradebook.qCols || []));
+  applyGradebook(gradebook, label);
+}
+// 从 Excel 粘贴：Tab 分隔或逗号分隔都认，宽表和长表都认，列名对应关系记下来下次复用。
+function loadPastedTable(text) {
+  const first = (text.split(/\r?\n/)[0] || '').toLowerCase();
+  if (first.includes('student')) { loadLongTableText(text, '粘贴成绩表'); return; }
+  const pasted = parsePastedTable(text);
+  if (!pasted.grid.length || pasted.grid.length < 2) {
+    document.getElementById('uploadMsg').innerHTML = '粘贴的内容认不出来：请确认粘贴的是成绩表（至少两行：表头 + 一行数据）。';
     return;
   }
-  gradebook = parseWideGradebook(text);
-  const blocked = gradebook.issues.filter(i => i.type === 'block');
-  const nBlank = gradebook.issues.filter(i => i.msg.includes('是空的')).length;
-  let nRows = 0;
-  gradebook.students.forEach(st => { gradebook.questions.forEach(q => { if (st.scores[q.qid] !== null && st.scores[q.qid] !== undefined) nRows++; }); });
-  document.getElementById('uploadMsg').innerHTML =
-    `已载入 ${label}：${gradebook.students.length} 名学生，${gradebook.questions.length} 道题。` +
-    (nBlank ? `其中 ${nBlank} 个空已按“不算 0 分”处理。` : '');
-  renderIssues(gradebook.issues);
-  document.getElementById('toStage2').disabled = blocked.length > 0 || gradebook.students.length === 0;
-  recordUpload(label, gradebook.students.length, gradebook.questions.length, nRows);
-  logAudit(`载入成绩表：${gradebook.students.length} 名学生，${gradebook.questions.length} 道题，${gradebook.issues.length} 条提示`);
+  const colMap = loadColMap();
+  gradebook = parseWideGradebookGrid(pasted.grid, colMap);
+  saveColMap(rememberColMap(colMap, gradebook.header || [], gradebook.qCols || []));
+  applyGradebook(gradebook, '粘贴成绩表');
 }
+document.getElementById('pasteBtn').addEventListener('click', () => {
+  const text = document.getElementById('pasteBox').value;
+  if (!text.trim()) { document.getElementById('uploadMsg').innerHTML = '粘贴框是空的：请先从 Excel 复制成绩表（Ctrl+C）再粘贴。'; return; }
+  loadPastedTable(text);
+});
 function loadGradebookFile(file) {
   if (/\.xlsx?$/i.test(file.name)) {
     const rd = new FileReader();
@@ -1112,11 +1470,17 @@ document.getElementById('splitBtn').addEventListener('click', () => {
   const text = document.getElementById('ocrText').value;
   const qs = splitQuestions(text);
   if (!qs.length) { document.getElementById('splitOut').innerHTML = '<p class="muted">没按题号拆出题目：请确认文字里有“1.”“2.”这样的题号，或者直接用办法一上传对应表。</p>'; return; }
-  let html = '<p class="muted">按题号拆出 ' + qs.length + ' 道题，知识点编号请逐题填（1 到 123），填完点下面“用这份对应关系”。也可以先点“自动标注知识点”，按题干关键词预填，置信度低的请老师逐题确认。</p><table><caption>拆题结果</caption><thead><tr><th scope="col">题号</th><th scope="col">题干</th><th scope="col">知识点编号</th><th scope="col">自动标注</th></tr></thead><tbody>';
+  let html = '<p class="muted">按题号拆出 ' + qs.length + ' 道题，知识点编号请逐题填（1 到 123），填完点下面“用这份对应关系”。也可以先点“自动标注知识点”，按题干关键词预填；或者点“智能标注（LLM）”，用你自己的 Key 调模型来标，调不通时自动改用关键词标注。置信度低的请老师逐题确认。</p><table><caption>拆题结果</caption><thead><tr><th scope="col">题号</th><th scope="col">题干</th><th scope="col">知识点编号</th><th scope="col">自动标注</th></tr></thead><tbody>';
   qs.forEach((q, i) => {
     html += `<tr><td>${q.qid}</td><td>${esc(q.stem.slice(0, 60))}</td><td><input type="number" min="1" max="123" data-qi="${i}" style="width:80px" placeholder="如 56" aria-label="第 ${q.qid} 题知识点编号"></td><td><span data-tag-qi="${i}"></span></td></tr>`;
   });
-  html += '</tbody></table><p><button id="autoTagBtn" class="secondary">自动标注知识点</button> <button id="applySplitBtn" class="secondary">用这份对应关系</button></p>';
+  const attr = v => esc(String(v || '')).replace(/"/g, '&quot;');
+  html += '</tbody></table><p><button id="autoTagBtn" class="secondary">自动标注知识点</button> <button id="llmTagBtn" class="secondary">智能标注（LLM）</button> <button id="applySplitBtn" class="secondary">用这份对应关系</button></p>';
+  html += '<div class="llm-settings"><p class="muted">智能标注用你自己的 Key 调模型（默认 OpenRouter），Key 只存在这台浏览器里，不会上传到别处。调不通时自动改用关键词标注。</p>' +
+    `<p><label>接口地址 <input type="text" id="llmBaseUrl" value="${attr(llmSettings.baseUrl)}" aria-label="LLM 接口地址" style="width:250px"></label> ` +
+    `<label>模型 <input type="text" id="llmModel" value="${attr(llmSettings.model)}" aria-label="LLM 模型" style="width:280px"></label></p>` +
+    `<p><label>API Key <input type="password" id="llmKey" value="${attr(llmSettings.apiKey)}" aria-label="LLM API Key" style="width:280px" autocomplete="off"></label> ` +
+    '<span id="llmStatus" class="muted"></span></p></div>';
   document.getElementById('splitOut').innerHTML = html;
   document.getElementById('applySplitBtn').addEventListener('click', () => {
     const map = {};
@@ -1131,24 +1495,41 @@ document.getElementById('splitBtn').addEventListener('click', () => {
     document.getElementById('toStage3').disabled = false;
     logAudit(`OCR 拆题并确认对应关系：${Object.keys(map).length} 道题`);
   });
-  document.getElementById('autoTagBtn').addEventListener('click', () => {
-    if (!window.__kcTagger) { document.getElementById('kcMsg').innerHTML = '标注模块没加载上，请刷新页面再试。'; return; }
-    const bank = window.__kcTagger.buildKCBank(window.__kcTagger.DEMO_BANK);
-    const tagged = window.__kcTagger.tagQuestions(qs, bank); // 与 qs 同顺序
-    const inputs = document.querySelectorAll('#splitOut input[data-qi]');
-    const notes = document.querySelectorAll('#splitOut span[data-tag-qi]');
-    let low = 0, filled = 0;
-    tagged.forEach((t, i) => {
-      const top = t.ranked[0];
-      const note = notes[i];
-      if (!top) { if (note) note.textContent = '没标上，请手动填'; low++; return; }
-      const entry = bank.find(e => e.id === top.skill);
-      if (note) note.textContent = `${top.skill} 号 · ${entry ? entry.name : ''}（置信度 ${top.confidence.toFixed(2)}${top.confidence < 0.5 ? '，建议确认' : ''}）`;
-      if (top.confidence < 0.5) low++;
-      if (inputs[i] && !inputs[i].value) { inputs[i].value = top.skill; filled++; }
-    });
-    document.getElementById('kcMsg').innerHTML = `自动标注完成：${filled} 道题已预填知识点，${low} 道置信度低或没标上，请逐题确认后再点“用这份对应关系”。`;
-    logAudit(`自动标注知识点：预填 ${filled} 道，${low} 道待确认`);
+  document.getElementById('autoTagBtn').addEventListener('click', () => runKeywordTag(qs));
+  ['llmBaseUrl', 'llmKey', 'llmModel'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => saveLLMSettings(readLLMSettingsFromForm()));
+  });
+  document.getElementById('llmTagBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('llmTagBtn');
+    const statusEl = document.getElementById('llmStatus');
+    if (!window.__llmTagger) { if (statusEl) statusEl.textContent = 'LLM 标注模块没加载上，请刷新页面再试。'; return; }
+    const s = readLLMSettingsFromForm();
+    saveLLMSettings(s);
+    if (!s.apiKey) { if (statusEl) statusEl.textContent = '请先填 API Key（只存在这台浏览器里，不会上传到别处）。'; return; }
+    if (!s.model) { if (statusEl) statusEl.textContent = '请先填模型。'; return; }
+    if (typeof fetch === 'undefined') { if (statusEl) statusEl.textContent = '这台浏览器调不通网络接口。'; return; }
+    btn.disabled = true;
+    btn.classList.add('loading');
+    if (statusEl) statusEl.textContent = '正在调模型标注…';
+    try {
+      const bank = buildLLMBank();
+      const kwBank = window.__kcTagger ? window.__kcTagger.buildKCBank(window.__kcTagger.DEMO_BANK) : [];
+      const res = await window.__llmTagger.tagQuestionsLLM(qs, bank, {
+        fetchFn: fetch.bind(window), baseUrl: s.baseUrl, apiKey: s.apiKey, model: s.model,
+        fallback: bqs => window.__kcTagger ? window.__kcTagger.tagQuestions(bqs, kwBank) : bqs.map(q => ({ qid: q.qid, ranked: [] }))
+      });
+      const r = applyTagged(res.tagged, bank, 'LLM');
+      const errNote = res.errors.length ? `（${res.errors.length} 条提示：${res.errors[0]}）` : '';
+      document.getElementById('kcMsg').innerHTML = `智能标注完成：${r.filled} 道题已预填知识点，${r.low} 道置信度低或没标上，请逐题确认后再点“用这份对应关系”。${errNote}`;
+      logAudit(`智能标注（LLM）：预填 ${r.filled} 道，${r.low} 道待确认`);
+      if (statusEl) statusEl.textContent = res.errors.length ? '部分批次用了关键词补位，见上面提示。' : '标注完成。';
+    } catch (e) {
+      if (statusEl) statusEl.textContent = '标注失败：' + (e.message || e) + '。已改用关键词标注。';
+      runKeywordTag(qs);
+    }
+    btn.disabled = false;
+    btn.classList.remove('loading');
   });
 });
 document.getElementById('toStage3').addEventListener('click', () => {
@@ -1159,12 +1540,12 @@ document.getElementById('toStage3').addEventListener('click', () => {
   const st = computeStats(rows);
   const sum = buildSummary(st);
   let html = `<div class="kpi-row">` + sum.map(k => `<div class="kpi"><b>${k.value}</b><span>${k.label}</span></div>`).join('') + `</div>`;
-  html += `<p>学生 ${st.nStudents} 人 · 题目 ${st.nQuestions} 道 · 作答 ${st.nRows} 条 · 整体正确率 ${(st.acc * 100).toFixed(1)}%` +
+  html += `<p>学生 ${st.nStudents} 人 · 题目 ${st.nQuestions} 道 · 作答 ${st.nRows} 条 · 整体正确率 ${(st.fullRate * 100).toFixed(1)}% · 平均得分率 ${(st.acc * 100).toFixed(1)}%` +
     (norm.skippedNoKC ? ` · ${norm.skippedNoKC} 条作答没有知识点对应关系，已跳过` : '') +
     (norm.skippedBlank ? ` · ${norm.skippedBlank} 个空格已跳过` : '') + '</p>';
-  html += `<h3>每题正确率（从低到高）</h3><table><caption>每题正确率</caption><thead><tr><th scope="col">题号</th><th scope="col">知识点</th><th scope="col" class="num">做过人数</th><th scope="col" class="num">正确率</th></tr></thead><tbody>`;
-  st.byQ.forEach(x => { html += `<tr><td>第 ${x.q} 题</td><td>${kcMap[x.q] || '—'} 号</td><td class="num">${x.n}</td><td class="num">${(x.acc * 100).toFixed(0)}%</td></tr>`; });
-  html += `</tbody></table><h3>每知识点正确率</h3><table><caption>每知识点正确率</caption><thead><tr><th scope="col">知识点</th><th scope="col" class="num">作答数</th><th scope="col" class="num">正确率</th><th scope="col"></th></tr></thead><tbody>`;
+  html += `<h3>每题正确率（从低到高）</h3><table><caption>每题正确率</caption><thead><tr><th scope="col">题号</th><th scope="col">知识点</th><th scope="col" class="num">做过人数</th><th scope="col" class="num">正确率</th><th scope="col" class="num">平均得分率</th></tr></thead><tbody>`;
+  st.byQ.forEach(x => { html += `<tr><td>第 ${x.q} 题</td><td>${kcMap[x.q] || '—'} 号</td><td class="num">${x.n}</td><td class="num">${(x.fullRate * 100).toFixed(0)}%</td><td class="num">${(x.acc * 100).toFixed(0)}%</td></tr>`; });
+  html += `</tbody></table><h3>每知识点得分率</h3><table><caption>每知识点得分率</caption><thead><tr><th scope="col">知识点</th><th scope="col" class="num">作答数</th><th scope="col" class="num">得分率</th><th scope="col"></th></tr></thead><tbody>`;
   st.byS.forEach(x => { html += `<tr><td>${x.s + 1} 号${skillName(x.s)}</td><td class="num">${x.n}</td><td class="num">${(x.acc * 100).toFixed(0)}%</td><td><div class="mini-bar"><i style="width:${Math.round(x.acc * 100)}%"></i></div></td></tr>`; });
   html += '</tbody></table>';
   document.getElementById('statsOut').innerHTML = html;
@@ -1185,7 +1566,7 @@ document.getElementById('toStage4').addEventListener('click', () => {
     <span><i class="dot mid"></i>中等（0.5–0.7）：<b>${tiers['中']}</b> 个知识点</span>
     <span><i class="dot weak"></i>偏弱（&lt;0.5）：<b>${tiers['弱']}</b> 个知识点</span>
   </div>`;
-  html += `<table><caption>掌握度最低的 15 个知识点</caption><thead><tr><th scope="col">知识点</th><th scope="col" class="num">掌握度</th><th scope="col"></th><th scope="col">证据</th><th scope="col" class="num">本次考试正确率</th><th scope="col">错得最多的题</th></tr></thead><tbody>`;
+  html += `<table><caption>掌握度最低的 15 个知识点</caption><thead><tr><th scope="col">知识点</th><th scope="col" class="num">掌握度</th><th scope="col"></th><th scope="col">证据</th><th scope="col" class="num">本次得分率</th><th scope="col">错得最多的题</th></tr></thead><tbody>`;
   order.slice(0, 15).forEach(s => {
     const ev = testedN[s] >= 3;
     const topQ = Object.entries(missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([q, n]) => `第 ${q} 题（${n}人错）`).join('、') || '—';
@@ -1228,7 +1609,7 @@ function renderOutline() {
     const topQ = topQEntries.length
       ? topQEntries.map(([q, n]) => `<span class="badge inf">第 ${q} 题 · ${n} 人错</span>`).join(' ')
       : '本次考试未直接考到';
-    const acc = diagnosis.testedN[s] ? `班级正确率 ${(diagnosis.testedC[s] / diagnosis.testedN[s] * 100).toFixed(0)}%` : '本次考试未考';
+    const acc = diagnosis.testedN[s] ? `班级得分率 ${(diagnosis.testedC[s] / diagnosis.testedN[s] * 100).toFixed(0)}%` : '本次考试未考';
     html += `<div class="outline-item" data-idx="${idx}">
       <div class="oi-head"><h4${it.kind === '讲' ? ' class="mark-weak"' : ''}>${idx + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${s + 1} 号${skillName(s)}知识点</h4>
       <span class="rowbtns"><button class="small ghost" onclick="moveItem(${idx},-1)">上移</button>
@@ -1315,6 +1696,7 @@ document.getElementById('copyBtn').addEventListener('click', () => {
 });
 loadUploads();
 renderUploads();
+loadLLMSettings();
 wireDensityBtn('densityBtn3');
 wireDensityBtn('densityBtn4');
 setStep(1);
