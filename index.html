@@ -305,6 +305,16 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
       <p><button id="splitBtn" class="secondary">按题号拆题</button></p>
       <div id="splitOut"></div>
     </div>
+    <h3>典型错卷（可选）</h3>
+    <p class="muted">改卷时随手记的典型错卷和错因，记进来，诊断和提纲里会用上。两种办法：下面直接加一条，或者把改卷笔记粘贴进来按行解析。不记也不影响后面的步骤。</p>
+    <p><label>题号 <input type="number" id="cjQid" min="1" style="width:70px" aria-label="典型错卷题号"></label>
+    <label>典型错法 <input type="text" id="cjTypical" style="width:220px" placeholder="例如：把长轴当作焦距" aria-label="典型错法"></label>
+    <label>错因 <select id="cjCause" aria-label="错因分类"><option value="">未归类（待确认）</option><option>概念不清</option><option>审题错误</option><option>计算失误</option><option>方法不当</option><option>书写规范</option></select></label>
+    <button id="cjAddBtn" class="secondary">加一条典型错卷</button></p>
+    <p class="muted">或者：粘贴改卷笔记，每行一条（例如“Q9 一半人把定义域漏了，概念不清”），点“解析笔记”自动拆成题号、典型错法和错因；归不上类的会标出来，等老师逐条确认。</p>
+    <textarea id="cjBox" aria-label="粘贴改卷笔记" placeholder="Q9 一半人把定义域漏了，概念不清"></textarea>
+    <p><button id="cjParseBtn" class="secondary">解析笔记</button> <span id="cjMsg" class="muted"></span></p>
+    <div id="cjList"></div>
     <p><button id="toStage3" disabled>确认试卷，进入统计</button></p>
   </div>
 
@@ -842,6 +852,177 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
 </script>
 <script>
+// cuojuan.js
+// 典型错卷输入模块（v1.4）：老师改卷时随手记的典型错卷和错因。
+// 用途：把“第 N 题 + 典型错法 + 错因”记进产品，诊断和提纲里用得上。
+// 纯 JS：不 import、不 require、不碰 DOM，Node 和浏览器都能直接用。
+// 输入形态（两种，见需求文档 6.8 节）：
+//   (1) 逐条加：题号 + 典型错法 + 错因分类（下拉选，老师可改写）；
+//   (2) 粘贴改卷笔记：每行一条，如“Q9 一半人把定义域漏了，概念不清”，
+//       按行解析成（题号、典型错法、错因）三元组。
+// 错因固定 5 类（见 CAUSES），每条错卷通过题目与知识点对应表落在知识点上
+// （attachSkill），不是只存自由文本；归不上类的进老师确认清单，不悄悄通过。
+(function () {
+  'use strict';
+
+  // 错因固定分类（5 类）。出处：高中数学易错题五类（审题不严、运算失误、
+  // 概念模糊、公式记忆不准确、思维不严）和错因四象限（知识性/方法性/
+  // 计算性/审题性）；公式记忆不准确并进概念不清（同属知识性），思维不严
+  // 并进方法不当，书写规范单列（书写格式不规范、步骤不全）。
+  // 老师可以在页面上手改：下拉里选别的分类，或在“其他”里自己写。
+  var CAUSES = ['概念不清', '审题错误', '计算失误', '方法不当', '书写规范'];
+
+  // 错因关键词（按分类计分，得分最高者胜；平局按 CAUSES 顺序取先者）。
+  // 只用老师笔记里常见的说法：概念类用概念条件词（判别式、开口方向、
+  // 定义域），方法类用方法名（特殊值法、设而不求、待定系数），不靠
+  // “错”“不会”这类 bare 大词单独命中。
+  var CAUSE_RULES = [
+    { cause: '审题错误', kws: ['审题', '看错', '没看清', '没注意到', '没注意', '读题不清', '看漏', '忽略', '隐含条件', '题意', '没看', '看错题'] },
+    { cause: '概念不清', kws: ['概念不清', '概念模糊', '概念没懂', '定义不清', '定义没懂', '定义域', '含义不清', '认识不足', '理解不透', '掌握不透', '掌握不准确', '知识掌握', '公式记错', '公式记忆', '定理', '不会判断', '不会解', '掌握不够全面', '掌握不够透彻', '判别式', '开口方向'] },
+    { cause: '计算失误', kws: ['计算失误', '计算粗心', '计算不准确', '计算不足', '计算能力不足', '算错', '粗心', '运算', '化简', '求解不熟练', '变形'] },
+    { cause: '方法不当', kws: ['方法不当', '特殊值法', '设而不求', '韦达定理', '待定系数', '转化意识', '转化能力', '数形结合', '综合能力', '策略不足', '思路', '技巧', '分类讨论', '列项相消', '化为'] },
+    { cause: '书写规范', kws: ['书写', '格式不规范', '表达', '步骤不全', '逻辑混乱'] }
+  ];
+
+  // classifyCause(text)：给一段错因描述归类，返回 5 类之一或 ''（未归类）。
+  // 规则：每类按命中的关键词个数计分，最高者胜；平局按 CAUSES 顺序取先者；
+  // 一分没得返回 ''，进老师确认清单。一行里提到两类以上时 multiCause 由
+  // parseCuojuanNotes 另外标出，这里只返回得分最高的一类。
+  function classifyCause(text) {
+    if (typeof text !== 'string' || text === '') return '';
+    var best = '', bestScore = 0;
+    for (var i = 0; i < CAUSE_RULES.length; i++) {
+      var rule = CAUSE_RULES[i];
+      var score = 0;
+      for (var j = 0; j < rule.kws.length; j++) {
+        if (text.indexOf(rule.kws[j]) !== -1) score++;
+      }
+      if (score > bestScore) { bestScore = score; best = rule.cause; }
+    }
+    return best;
+  }
+
+  // 一行笔记里提到几类错因（>1 时 parseCuojuanNotes 标 multiCause）。
+  function causeHitCount(text) {
+    var n = 0;
+    for (var i = 0; i < CAUSE_RULES.length; i++) {
+      var rule = CAUSE_RULES[i];
+      for (var j = 0; j < rule.kws.length; j++) {
+        if (text.indexOf(rule.kws[j]) !== -1) { n++; break; }
+      }
+    }
+    return n;
+  }
+
+  // 从一行里抠题号：Q9、Q 9、第 9 题、第9题、行首“9、”“9.”“9)”都认。
+  // 返回题号（数字）或 null。行首数字后面必须跟分隔符（、.．）），避免
+  // 把“2024 年”这类年份当题号。
+  function extractQid(line) {
+    var m = line.match(/Q\s*(\d+)/i);
+    if (m) return +m[1];
+    m = line.match(/第\s*(\d+)\s*题/);
+    if (m) return +m[1];
+    m = line.match(/^\s*(\d+)\s*[、.．)）]/);
+    if (m) return +m[1];
+    m = line.match(/(\d+)\s*题/);
+    if (m) return +m[1];
+    return null;
+  }
+
+  // 去掉行首的题号标记，剩下的就是典型错法原文（老师的话原样保留）。
+  function stripQid(line, qid) {
+    var out = line;
+    out = out.replace(/^\s*Q\s*\d+\s*[:：、.．)）]?\s*/i, '');
+    out = out.replace(/^\s*第\s*\d+\s*题\s*[:：、.．)）]?\s*/i, '');
+    out = out.replace(/^\s*\d+\s*[、.．)）]\s*/, '');
+    out = out.replace(/^\s*(\d+)\s*题\s*[:：、，,]?\s*/, '');
+    return out.trim();
+  }
+
+  // parseCuojuanNotes(text)：把粘贴的改卷笔记按行解析。
+  // 每行一条，返回 { notes, skipped }：
+  //   notes: [{ qid, typical, cause, multiCause }]，typical 是老师原话，
+  //          cause 是 5 类之一或 ''（未归类，进老师确认清单），
+  //          multiCause 表示这行提到了两类以上错因（取分最高的当主因）。
+  //   skipped: [{ line, reason }]，reason 是“没有题号”或“只有题号没有内容”。
+  // 同一题号出现两次，后一行覆盖前一行（mergeNotes 里处理，这里原样返回，
+  // 顺序即粘贴顺序）。
+  function parseCuojuanNotes(text) {
+    var notes = [], skipped = [];
+    if (typeof text !== 'string') return { notes: notes, skipped: skipped };
+    var lines = text.split(/\r?\n/);
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line) continue;
+      var qid = extractQid(line);
+      if (!qid) { skipped.push({ line: line, reason: '没有题号' }); continue; }
+      var typical = stripQid(line, qid);
+      if (!typical) { skipped.push({ line: line, reason: '只有题号没有内容' }); continue; }
+      notes.push({
+        qid: qid,
+        typical: typical,
+        cause: classifyCause(typical),
+        multiCause: causeHitCount(typical) > 1
+      });
+    }
+    return { notes: notes, skipped: skipped };
+  }
+
+  // attachSkill(notes, kcMap)：把每条错卷落到知识点上。
+  // kcMap 是题目与知识点对应表 {qid: skillId}；对不上的 skill 为 null，
+  // noKC 为 true（老师确认清单里看得到，不是悄悄丢掉）。
+  function attachSkill(notes, kcMap) {
+    if (!Array.isArray(notes)) return [];
+    return notes.map(function (n) {
+      var skill = (kcMap && kcMap[n.qid]) ? kcMap[n.qid] : null;
+      var out = { qid: n.qid, typical: n.typical, cause: n.cause, multiCause: !!n.multiCause, skill: skill };
+      if (!skill) out.noKC = true;
+      return out;
+    });
+  }
+
+  // mergeNotes(existing, parsed)：把解析出的笔记并进已有的错卷记录。
+  // existing 是 {qid: note} 的对象；同一题号后来的覆盖先前的（老师改过
+  // 的笔记重新粘贴，以新版为准）；返回新对象，不改原对象。
+  function mergeNotes(existing, parsed) {
+    var out = {};
+    var k;
+    if (existing && typeof existing === 'object') {
+      for (k in existing) {
+        if (Object.prototype.hasOwnProperty.call(existing, k)) out[k] = existing[k];
+      }
+    }
+    if (Array.isArray(parsed)) {
+      for (var i = 0; i < parsed.length; i++) {
+        var n = parsed[i];
+        if (n && n.qid) out[n.qid] = n;
+      }
+    }
+    return out;
+  }
+
+  // formatNote(note)：一条错卷的显示写法，供页面和测试共用。
+  // 例：”第 9 题 · 典型错法：把定义域漏了；错因：概念不清“。
+  function formatNote(note) {
+    if (!note || !note.qid) return '';
+    var s = '第 ' + note.qid + ' 题 · 典型错法：' + (note.typical || '');
+    s += '；错因：' + (note.cause || '未归类（待确认）');
+    if (note.multiCause) s += '（这条里还提到别的可能原因，请确认）';
+    return s;
+  }
+
+  globalThis.__cuojuan = {
+    CAUSES: CAUSES,
+    classifyCause: classifyCause,
+    parseCuojuanNotes: parseCuojuanNotes,
+    attachSkill: attachSkill,
+    mergeNotes: mergeNotes,
+    formatNote: formatNote
+  };
+})();
+
+</script>
+<script>
 /* 讲评提纲 Word 导出模块
  * 纯 JS，不依赖第三方包，不碰 DOM，可在 Node 和浏览器里直接用。
  * 生成 Word 能直接打开的 HTML 格式 .doc 文档。
@@ -887,6 +1068,13 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     parts.push('<p>掌握度：' + escapeHtml(formatMastery(item && item.mastery)) + '</p>');
     parts.push('<p>班级得分率：' + escapeHtml(formatAcc(item && item.acc)) + '</p>');
     parts.push('<p>错题示例：' + escapeHtml(topQ) + '</p>');
+    // 典型错卷：有就逐条写，没有就不写这一行，老的导出内容不受影响。
+    var cj = item && Array.isArray(item.cuojuan) ? item.cuojuan : [];
+    for (var ci = 0; ci < cj.length; ci++) {
+      var n = cj[ci] || {};
+      parts.push('<p>典型错法（第 ' + escapeHtml(n.q) + ' 题）：' + escapeHtml(n.typical || '') +
+        '；错因：' + escapeHtml(n.cause || '未归类（待确认）') + '</p>');
+    }
     parts.push('<p>' + escapeHtml(adviceFor(kind)) + '</p>');
     return parts.join('\n');
   }
@@ -1011,6 +1199,7 @@ const PRIOR = MODEL.prior;
 
 let gradebook = null;   // {students, questions, issues}
 let kcMap = null;       // {qid: skill(1-based)}
+let cuojuan = {};       // {qid: {qid, typical, cause, skill}} 典型错卷，老师改卷时记的
 let rows = [];          // {student, q, s(0-based), y}
 let diagnosis = null;
 let audit = [];
@@ -1180,6 +1369,58 @@ function runKeywordTag(qs) {
   document.getElementById('kcMsg').innerHTML = `自动标注完成：${res.filled} 道题已预填知识点，${res.low} 道置信度低或没标上，请逐题确认后再点“用这份对应关系”。`;
   logAudit(`自动标注知识点：预填 ${res.filled} 道，${res.low} 道待确认`);
   return res;
+}
+// ---------- 典型错卷（v1.4）：逐条加 + 粘贴笔记解析 ----------
+// 错因下拉选项（静态写在模板里）；拆题表里的错因下拉在这里拼。
+function cuojuanCauseOptions(selected) {
+  const causes = (window.__cuojuan && window.__cuojuan.CAUSES) || ['概念不清', '审题错误', '计算失误', '方法不当', '书写规范'];
+  let h = '<option value="">未归类（待确认）</option>';
+  causes.forEach(c => { h += `<option value="${esc(c)}"${c === selected ? ' selected' : ''}>${esc(c)}</option>`; });
+  return h;
+}
+// 错卷落到知识点上：按对应表查题号的知识点；对不上的标“未对应知识点”，不丢。
+function refreshCuojuanSkills() {
+  Object.values(cuojuan).forEach(n => { n.skill = kcMap && kcMap[n.qid] ? kcMap[n.qid] : null; });
+  renderCuojuan();
+}
+// 已记的错卷列表：点“改”填回上面再保存（同一题号覆盖），点“删”去掉。
+function renderCuojuan() {
+  const el = document.getElementById('cjList');
+  if (!el) return;
+  const list = Object.values(cuojuan).sort((a, b) => a.qid - b.qid);
+  if (!list.length) { el.innerHTML = '<p class="muted">还没记典型错卷（可选，不记也能往下走）。</p>'; return; }
+  let html = '<table><caption>已记的典型错卷（点“改”填回上面再保存，点“删”去掉）</caption><thead><tr><th scope="col">题号</th><th scope="col">典型错法</th><th scope="col">错因</th><th scope="col">知识点</th><th scope="col">操作</th></tr></thead><tbody>';
+  list.forEach(n => {
+    const kc = n.skill ? (kcNameById(n.skill) ? n.skill + ' 号 · ' + kcNameById(n.skill) : n.skill + ' 号') : '未对应知识点';
+    const cause = n.cause ? esc(n.cause) : '未归类（待确认）';
+    html += `<tr><td>第 ${n.qid} 题</td><td>${esc(n.typical)}</td><td>${cause}${n.multiCause ? ' · 多因' : ''}</td><td>${esc(kc)}</td><td><button class="small ghost" onclick="editCuojuan(${n.qid})">改</button> <button class="small danger" onclick="delCuojuan(${n.qid})">删</button></td></tr>`;
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+window.editCuojuan = function (qid) {
+  const n = cuojuan[qid];
+  if (!n) return;
+  document.getElementById('cjQid').value = n.qid;
+  document.getElementById('cjTypical').value = n.typical;
+  document.getElementById('cjCause').value = n.cause || '';
+  document.getElementById('cjTypical').focus();
+  toast('已填回上面，改完点“加一条典型错卷”保存（同一题号会覆盖）。');
+};
+window.delCuojuan = function (qid) {
+  delete cuojuan[qid];
+  renderCuojuan();
+  logAudit(`删掉第 ${qid} 题的典型错卷`);
+};
+// 某几道题的错卷记录（原始对象，供 Markdown/Word 导出用）。
+function cuojuanNotesForQuestions(qids) {
+  return (qids || []).map(q => cuojuan[q]).filter(Boolean);
+}
+// 某道题的错卷行（诊断表和提纲共用，HTML 转义过）：没记返回 ''，不影响原有显示。
+function cuojuanLinesForQuestions(qids) {
+  return cuojuanNotesForQuestions(qids).map(n =>
+    `第 ${n.qid} 题典型错法：${esc(n.typical)}；错因：${n.cause ? esc(n.cause) : '未归类（待确认）'}`
+  );
 }
 
 // ---------- CSV helpers (pure) ----------
@@ -1530,6 +1771,7 @@ document.getElementById('demoBtn').addEventListener('click', () => {
   kcMap = kc.map;
   document.getElementById('kcMsg').innerHTML = `模拟对应表已载入：${Object.keys(kcMap).length} 道题，5 个知识点。`;
   document.getElementById('toStage3').disabled = false;
+  refreshCuojuanSkills();
   loadGradebookText(MOCK_WIDE_CSV, '模拟数据');
   logAudit('加载模拟数据');
   toast('模拟数据已载入');
@@ -1550,8 +1792,36 @@ document.getElementById('kcFile').addEventListener('change', e => {
       (kc.issues.length ? `<br>${kc.issues.map(esc).join('<br>')}` : '');
     document.getElementById('toStage3').disabled = Object.keys(kcMap).length === 0;
     logAudit(`载入题目与知识点对应表：${Object.keys(kcMap).length} 道题`);
+    refreshCuojuanSkills();
   };
   rd.readAsText(f);
+});
+// 典型错卷：逐条加（同一题号覆盖旧的）
+document.getElementById('cjAddBtn').addEventListener('click', () => {
+  const qid = +document.getElementById('cjQid').value;
+  const typical = document.getElementById('cjTypical').value.trim();
+  const cause = document.getElementById('cjCause').value;
+  if (!qid || !typical) { document.getElementById('cjMsg').textContent = '题号和典型错法都要填，才能加一条。'; return; }
+  cuojuan[qid] = { qid, typical, cause, skill: kcMap && kcMap[qid] ? kcMap[qid] : null };
+  refreshCuojuanSkills();
+  document.getElementById('cjMsg').textContent = `已记第 ${qid} 题的典型错卷。`;
+  document.getElementById('cjTypical').value = '';
+  logAudit(`记典型错卷：第 ${qid} 题`);
+});
+// 典型错卷：粘贴改卷笔记，每行一条，按行解析
+document.getElementById('cjParseBtn').addEventListener('click', () => {
+  const text = document.getElementById('cjBox').value;
+  if (!window.__cuojuan) { document.getElementById('cjMsg').textContent = '错卷模块没加载上，请刷新页面再试。'; return; }
+  if (!text.trim()) { document.getElementById('cjMsg').textContent = '粘贴框是空的：先把改卷笔记粘贴进来，每行一条。'; return; }
+  const res = window.__cuojuan.parseCuojuanNotes(text);
+  cuojuan = window.__cuojuan.mergeNotes(cuojuan, res.notes);
+  refreshCuojuanSkills();
+  const unclassified = res.notes.filter(n => !n.cause).length;
+  document.getElementById('cjMsg').textContent =
+    `解析出 ${res.notes.length} 条典型错卷` +
+    (unclassified ? `，其中 ${unclassified} 条错因没归上类，请在上面表里逐条确认` : '') +
+    (res.skipped.length ? `；${res.skipped.length} 行没认出来（${res.skipped[0].reason}），已跳过` : '') + '。';
+  logAudit(`解析改卷笔记：${res.notes.length} 条典型错卷，${res.skipped.length} 行跳过`);
 });
 
 let paperImageFile = null;
@@ -1660,9 +1930,9 @@ document.getElementById('splitBtn').addEventListener('click', () => {
   const text = document.getElementById('ocrText').value;
   const qs = splitQuestions(text);
   if (!qs.length) { document.getElementById('splitOut').innerHTML = '<p class="muted">没按题号拆出题目：请确认文字里有“1.”“2.”这样的题号，或者直接用办法一上传对应表。</p>'; return; }
-  let html = '<p class="muted">按题号拆出 ' + qs.length + ' 道题，知识点编号请逐题填（高中库 1001–1085，或旧编号 1–123），也可以点输入框从下拉里选知识点名称；填完点下面“用这份对应关系”。也可以先点“自动标注知识点”，按题干关键词预填；或者点“智能标注（LLM）”，用你自己的 Key 调模型来标，调不通时自动改用关键词标注。置信度低的请老师逐题确认。</p><table><caption>拆题结果</caption><thead><tr><th scope="col">题号</th><th scope="col">题干</th><th scope="col">知识点编号</th><th scope="col">自动标注</th></tr></thead><tbody>';
+  let html = '<p class="muted">按题号拆出 ' + qs.length + ' 道题，知识点编号请逐题填（高中库 1001–1085，或旧编号 1–123），也可以点输入框从下拉里选知识点名称；填完点下面“用这份对应关系”。也可以先点“自动标注知识点”，按题干关键词预填；或者点“智能标注（LLM）”，用你自己的 Key 调模型来标，调不通时自动改用关键词标注。置信度低的请老师逐题确认。高错题还可以在“典型错法”里补一句学生常错的样子、选一个错因，诊断和提纲里会用上，不填也不影响。</p><table><caption>拆题结果</caption><thead><tr><th scope="col">题号</th><th scope="col">题干</th><th scope="col">知识点编号</th><th scope="col">自动标注</th><th scope="col">典型错法</th><th scope="col">错因</th></tr></thead><tbody>';
   qs.forEach((q, i) => {
-    html += `<tr><td>${q.qid}</td><td>${esc(q.stem.slice(0, 60))}</td><td><input type="text" list="kcDatalist" data-qi="${i}" style="width:110px" placeholder="如 1074" aria-label="第 ${q.qid} 题知识点编号"></td><td><span data-tag-qi="${i}"></span></td></tr>`;
+    html += `<tr><td>${q.qid}</td><td>${esc(q.stem.slice(0, 60))}</td><td><input type="text" list="kcDatalist" data-qi="${i}" style="width:110px" placeholder="如 1074" aria-label="第 ${q.qid} 题知识点编号"></td><td><span data-tag-qi="${i}"></span></td><td><input type="text" data-cj-qi="${i}" style="width:150px" placeholder="如：把长轴当作焦距" aria-label="第 ${q.qid} 题典型错法"></td><td><select data-cause-qi="${i}" aria-label="第 ${q.qid} 题错因分类">${cuojuanCauseOptions('')}</select></td></tr>`;
   });
   const kcOpts = [];
   try {
@@ -1688,9 +1958,21 @@ document.getElementById('splitBtn').addEventListener('click', () => {
     });
     if (!Object.keys(map).length) { document.getElementById('kcMsg').innerHTML = '还没填知识点编号。'; return; }
     kcMap = map;
-    document.getElementById('kcMsg').innerHTML = `已用 OCR 拆题结果：${Object.keys(map).length} 道题有知识点。`;
+    // 拆题表里补的典型错法和错因一起收进来，落到上面刚确认的知识点上。
+    let nCj = 0;
+    document.querySelectorAll('#splitOut input[data-cj-qi]').forEach(inp => {
+      const q = qs[+inp.dataset.cjQi];
+      const typical = (inp.value || '').trim();
+      if (!q || !typical) return;
+      const sel = document.querySelector(`#splitOut select[data-cause-qi="${+inp.dataset.cjQi}"]`);
+      cuojuan[q.qid] = { qid: q.qid, typical, cause: sel ? sel.value : '', skill: map[q.qid] || null };
+      nCj++;
+    });
+    refreshCuojuanSkills();
+    document.getElementById('kcMsg').innerHTML = `已用 OCR 拆题结果：${Object.keys(map).length} 道题有知识点。` +
+      (nCj ? `其中 ${nCj} 道题记了典型错卷。` : '');
     document.getElementById('toStage3').disabled = false;
-    logAudit(`OCR 拆题并确认对应关系：${Object.keys(map).length} 道题`);
+    logAudit(`OCR 拆题并确认对应关系：${Object.keys(map).length} 道题${nCj ? `，${nCj} 条典型错卷` : ''}`);
   });
   document.getElementById('autoTagBtn').addEventListener('click', () => runKeywordTag(qs));
   ['llmBaseUrl', 'llmKey', 'llmModel'].forEach(id => {
@@ -1772,14 +2054,18 @@ document.getElementById('toStage4').addEventListener('click', () => {
   html += `<table><caption>知识点掌握度（考到过的在前）</caption><thead><tr><th scope="col">知识点</th><th scope="col" class="num">掌握度</th><th scope="col"></th><th scope="col">证据</th><th scope="col" class="num">本次得分率</th><th scope="col">错得最多的题</th></tr></thead><tbody>`;
   tableRows.forEach(s => {
     const ev = testedN[s] >= 3;
-    const topQ = Object.entries(missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([q, n]) => `第 ${q} 题（${n}人错）`).join('、') || '—';
+    const topQEntries = Object.entries(missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const topQ = topQEntries.length ? topQEntries.map(([q, n]) => `第 ${q} 题（${n}人错）`).join('、') : '—';
+    // 典型错卷进高错题错因分析：记了错卷的题，在错题后面多一行典型错法和错因。
+    const cjLines = cuojuanLinesForQuestions(topQEntries.map(([q]) => q));
     html += `<tr><td>${skillLabel(s)}</td><td class="num">${mastery[s].toFixed(2)}</td>
       <td><div class="bar"><i style="width:${Math.round(mastery[s] * 100)}%"></i></div></td>
       <td><span class="badge ${ev ? 'ev' : 'inf'}">${ev ? '有证据' : '推断'}</span> ${testedN[s] ? (testedN[s] | 0) + ' 人次' : '本次未考'}</td>
       <td class="num">${testedN[s] ? (testedC[s] / testedN[s] * 100).toFixed(0) + '%' : '未考'}</td>
-      <td>${topQ}</td></tr>`;
+      <td>${topQ}${cjLines.length ? '<br>' + cjLines.join('<br>') : ''}</td></tr>`;
   });
-  html += `</tbody></table><p class="muted">先列考到过的知识点（按掌握度从低到高，最多 15 个），再补没考到的推断项。推断项本次考试没考到，讲评时只作“下次覆盖”的参考。</p>`;
+  html += `</tbody></table><p class="muted">先列考到过的知识点（按掌握度从低到高，最多 15 个），再补没考到的推断项。推断项本次考试没考到，讲评时只作“下次覆盖”的参考。` +
+    (Object.keys(cuojuan).length ? `本次记了 ${Object.keys(cuojuan).length} 条典型错卷，标在上面错得最多的题后面；错因没归上类的请回第 2 步改。` : '') + `</p>`;
   const weakTested = order.filter(s => testedN[s] >= 3).slice(0, 5);
   if (weakTested.length) {
     const stu = Object.entries(diagnosis.perStudent).map(([sid, m]) => ({
@@ -1817,6 +2103,9 @@ function renderOutline() {
       ? topQEntries.map(([q, n]) => `<span class="badge inf">第 ${q} 题 · ${n} 人错</span>`).join(' ')
       : '本次考试未直接考到';
     const acc = diagnosis.testedN[s] ? `班级得分率 ${(diagnosis.testedC[s] / diagnosis.testedN[s] * 100).toFixed(0)}%` : '本次考试未考';
+    // 典型错卷进提纲：重点讲的题下面多一行典型错法和错因，老师照着讲。
+    const cjLines = cuojuanLinesForQuestions(topQEntries.map(([q]) => q));
+    const cjHtml = cjLines.length ? cjLines.map(l => `<p class="muted">${l}</p>`).join('') : '';
     html += `<div class="outline-item" data-idx="${idx}">
       <div class="oi-head"><h4${it.kind === '讲' ? ' class="mark-weak"' : ''}>${idx + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${skillLabel(s)}知识点</h4>
       <span class="rowbtns"><button class="small ghost" onclick="moveItem(${idx},-1)">上移</button>
@@ -1824,6 +2113,7 @@ function renderOutline() {
       <button class="small danger" onclick="delItem(${idx})">删</button></span></div>
       <p><span class="badge ${it.kind === '讲' ? 'warn' : 'inf'}">${it.kind === '讲' ? '重点讲' : '下次覆盖'}</span> <span class="badge ${it.mastery < 0.5 ? 'warn' : 'inf'}">掌握度 ${it.mastery.toFixed(2)}</span> · ${acc}</p>
       <p>错题示例：${topQ}</p>
+      ${cjHtml}
       <p class="muted">${it.kind === '讲' ? '建议：先讲概念，再讲错题，最后变式练一道。' : '建议：这次先不讲，下次考试出题覆盖这个知识点。'}</p>
     </div>`;
   });
@@ -1852,8 +2142,13 @@ function buildOutlineMd() {
   let md = '# 讲评提纲\n\n';
   items.forEach((it, i) => {
     const s = it.s, d = diagnosis;
-    const topQ = Object.entries(d.missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([q, n]) => `第 ${q} 题（${n} 人错）`).join('、') || '本次考试未直接考到';
-    md += `${i + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${skillShort(s)}知识点（掌握度 ${it.mastery.toFixed(2)}）\n   错题示例：${topQ}\n\n`;
+    const topQEntries = Object.entries(d.missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const topQ = topQEntries.map(([q, n]) => `第 ${q} 题（${n} 人错）`).join('、') || '本次考试未直接考到';
+    md += `${i + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${skillShort(s)}知识点（掌握度 ${it.mastery.toFixed(2)}）\n   错题示例：${topQ}\n`;
+    cuojuanNotesForQuestions(topQEntries.map(([q]) => q)).forEach(n => {
+      md += `   第 ${n.qid} 题典型错法：${n.typical}；错因：${n.cause || '未归类（待确认）'}\n`;
+    });
+    md += '\n';
   });
   return md;
 }
@@ -1875,9 +2170,11 @@ document.getElementById('exportWordBtn').addEventListener('click', () => {
   if (!window.__wordExport) { document.getElementById('exportText').value = 'Word 导出模块没加载上，请刷新页面再试。'; document.getElementById('exportFallback').classList.remove('hidden'); return; }
   const items = (window._outline || []).map(it => {
     const s = it.s, d = diagnosis;
-    const topQ = Object.entries(d.missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([q, n]) => `第 ${q} 题（${n} 人错）`).join('、') || null;
+    const topQEntries = Object.entries(d.missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const topQ = topQEntries.map(([q, n]) => `第 ${q} 题（${n} 人错）`).join('、') || null;
     const kc = slotKC[s];
-    return { kind: it.kind, skill: kc ? kc.id : s + 1, skillName: kc ? kc.name : '', mastery: it.mastery, acc: d.testedN[s] ? d.testedC[s] / d.testedN[s] : null, topQ };
+    return { kind: it.kind, skill: kc ? kc.id : s + 1, skillName: kc ? kc.name : '', mastery: it.mastery, acc: d.testedN[s] ? d.testedC[s] / d.testedN[s] : null, topQ,
+      cuojuan: cuojuanNotesForQuestions(topQEntries.map(([q]) => q)).map(n => ({ q: n.qid, typical: n.typical, cause: n.cause || '' })) };
   });
   const doc = window.__wordExport.buildWordDoc(items, { title: '讲评提纲', date: new Date().toISOString().slice(0, 10) });
   const blob = new Blob([doc.content], { type: doc.mime });
@@ -1905,6 +2202,7 @@ document.getElementById('copyBtn').addEventListener('click', () => {
 loadUploads();
 renderUploads();
 loadLLMSettings();
+renderCuojuan();
 wireDensityBtn('densityBtn3');
 wireDensityBtn('densityBtn4');
 setStep(1);
