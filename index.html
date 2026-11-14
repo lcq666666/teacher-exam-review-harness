@@ -385,6 +385,16 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
   .field-grid { grid-template-columns: 1fr; }
   .site-nav { flex-wrap: wrap; }
 }
+
+/* A-3：诊断一句话结论、得分分布行、提纲拖拽/已删/预览（只加布局，不改颜色） */
+.diag-summary { font-size: 1.05em; margin: 0 0 12px; }
+.dist-row td { padding-top: 4px; padding-bottom: 10px; }
+.outline-item[draggable="true"] { cursor: grab; }
+.outline-item[draggable="true"]:active { cursor: grabbing; }
+.drag-handle { cursor: grab; margin-right: 6px; letter-spacing: 1px; }
+.deleted-item { opacity: .75; }
+#docxPreview { margin-top: 12px; padding-top: 12px; border-top: 1px solid; }
+#docxPreviewBody .outline-item { margin: 8px 0; }
 </style>
 </head>
 <body>
@@ -508,6 +518,7 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
     <h3>办法一：上传对应表</h3>
     <p><input type="file" id="kcFile" accept=".csv"></p>
     <div id="kcMsg" class="muted"></div>
+    <p id="bankInfoLine" class="muted"></p>
     <h3>办法二：试卷 OCR（PaddleOCR，备用 Tesseract.js）</h3>
     <p id="ocrLimits" class="muted">OCR 能读印刷体的题目文字、题号和分数；手写的答案、公式图片、看图做的题干读不了，公式和图形是已知短板；读不出来就跳过 OCR，直接上传题目与知识点对应表，或者从知识点库里点选。</p>
     <div class="dropzone" id="paperDrop" aria-label="上传试卷图片：把文件拖到这里，或按回车点选文件"><input type="file" id="paperFile" accept="image/*,.pdf" aria-label="上传试卷图片"><span>把试卷图片拖到这里，或点选文件</span></div>
@@ -523,12 +534,17 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
     <p class="muted">改卷时随手记的典型错卷和错因，记进来，诊断和提纲里会用上。两种办法：下面直接加一条，或者把改卷笔记粘贴进来按行解析。不记也不影响后面的步骤。</p>
     <p><label>题号 <input type="number" id="cjQid" min="1" style="width:70px" aria-label="典型错卷题号"></label>
     <label>典型错法 <input type="text" id="cjTypical" style="width:220px" placeholder="例如：把长轴当作焦距" aria-label="典型错法"></label>
-    <label>错因 <select id="cjCause" aria-label="错因分类"><option value="">未归类（待确认）</option><option>概念不清</option><option>审题错误</option><option>计算失误</option><option>方法不当</option><option>书写规范</option></select></label>
+    <label>错因 <select id="cjCause" aria-label="错因分类"></select></label>
     <button id="cjAddBtn" class="secondary">加一条典型错卷</button></p>
     <p class="muted">或者：粘贴改卷笔记，每行一条（例如“Q9 一半人把定义域漏了，概念不清”），点“解析笔记”自动拆成题号、典型错法和错因；归不上类的会标出来，等老师逐条确认。</p>
     <textarea id="cjBox" aria-label="粘贴改卷笔记" placeholder="Q9 一半人把定义域漏了，概念不清"></textarea>
     <p><button id="cjParseBtn" class="secondary">解析笔记</button> <span id="cjMsg" class="muted"></span></p>
     <div id="cjList"></div>
+    <div id="cjUnparsed"></div>
+    <h3>错因分类设置</h3>
+    <p class="muted">五类错因的名字可以改（比如把“计算失误”改成“算错了”），改完新记的错卷、诊断和提纲里都用新名字；原来记的错卷跟着改名，不丢。关键词和归类规则不变，改名不影响归类结果。</p>
+    <div id="causeSettings"></div>
+    <p><button id="causeSaveBtn" class="secondary">保存错因分类</button> <button id="causeResetBtn" class="small ghost">恢复默认五类</button> <span id="causeMsg" class="muted"></span></p>
     <p><button id="toStage3" disabled>确认试卷，进入统计</button></p>
   </div>
 
@@ -551,8 +567,15 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
     <h2>第 5 步 · 讲评提纲</h2>
     <div id="outlineOut"></div>
     <p><button id="exportBtn">导出讲评提纲（.md）</button>
-    <button id="exportWordBtn" class="secondary">导出 Word (.doc)</button>
+    <button id="exportWordBtn" class="secondary">导出 Word (.docx)</button>
     <button id="copyBtn" class="secondary">复制提纲</button></p>
+    <div id="docxPreview" class="hidden">
+      <h3>讲义预览（.docx，A4）</h3>
+      <div id="docxPreviewBody"></div>
+      <p class="muted" id="docxCheckMsg" role="status"></p>
+      <p><button id="docxConfirmBtn">确认下载 .docx</button>
+      <button id="docxCancelBtn" class="small ghost">取消</button></p>
+    </div>
     <div id="exportFallback" class="hidden">
       <p class="muted">如果下载没反应（有些浏览器或应用内预览会拦住下载），直接从下面复制：</p>
       <textarea id="exportText" readonly></textarea>
@@ -873,6 +896,78 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   // HS_BANK 版本号：后台页展示用；库内容变了就改这里的日期。
   var HS_BANK_VERSION = '2026-11-14';
 
+  // ---------- KC 库注册表（A20）：“学科 + 版本”两维，扩学科只加数据 ----------
+  // 每个条目 {id, subject, version, source, points}，points 是 buildKCBank 后的数组。
+  // 高中数学是首发学科（id 'hs-math'）；演示库（5 个旧编号知识点）走同一结构，
+  // 供演示流程和 LLM 候选库用，不单独算一个学科。
+  // 新学科 = 一个数据对象 + 一行 registerBank 调用，不改 tagQuestion、
+  // tagQuestions、measureTagging、诊断、提纲、导出里的任何代码。
+  var KC_BANK_REGISTRY = {};
+  var KC_BANK_ORDER = [];
+  var ACTIVE_BANK_ID = 'hs-math';
+
+  // registerBank(id, data)：注册一学科的库。data 形如
+  // {subject: '高中数学', version: '2026-11-14', source: '人教版 2019 版', points: [...]}。
+  // points 照 buildKCBank 的口径规范化（去非法、去重、按 id 排序）；
+  // subject/version 非空、points 至少 1 条才注册成功，失败返回 false。
+  function registerBank(id, data) {
+    if (typeof id !== 'string' || id === '') return false;
+    if (!data || typeof data !== 'object') return false;
+    if (typeof data.subject !== 'string' || data.subject.trim() === '') return false;
+    if (typeof data.version !== 'string' || data.version.trim() === '') return false;
+    if (!Array.isArray(data.points) || data.points.length === 0) return false;
+    var points = buildKCBank(data.points);
+    if (points.length === 0) return false;
+    if (!KC_BANK_REGISTRY[id]) KC_BANK_ORDER.push(id);
+    KC_BANK_REGISTRY[id] = {
+      id: id,
+      subject: data.subject,
+      version: data.version,
+      source: typeof data.source === 'string' ? data.source : '',
+      points: points
+    };
+    return true;
+  }
+
+  // getBank(id)：取一学科的库条目（找不到返回 null）。
+  function getBank(id) {
+    return KC_BANK_REGISTRY[id] || null;
+  }
+
+  // listBanks()：已注册学科的元信息（不含 points）：[{id, subject, version, source, count}]，
+  // 按注册顺序。页脚、后台、测试都从这里取版本信息，不直接读 HS_BANK_VERSION。
+  function listBanks() {
+    return KC_BANK_ORDER.map(function (id) {
+      var b = KC_BANK_REGISTRY[id];
+      return { id: b.id, subject: b.subject, version: b.version, source: b.source, count: b.points.length };
+    });
+  }
+
+  // activeBank()：当前学科的库（默认高中数学）。标注、诊断、提纲、导出
+  // 都从这里取候选库，不再直接读 HS_BANK / DEMO_BANK 两个硬编码变量。
+  function activeBank() {
+    return getBank(ACTIVE_BANK_ID);
+  }
+
+  // setActiveBank(id)：切换当前学科（只改注册表里的指针，不动任何流水线代码）。
+  // 找不到的 id 返回 false，当前学科不变。产品里现在只有一个首发学科，
+  // 切换只在测试里验证；以后加学科时，页面上的学科切换走这个函数。
+  function setActiveBank(id) {
+    if (!getBank(id)) return false;
+    ACTIVE_BANK_ID = id;
+    return true;
+  }
+
+  // bankInfo(id)：一学科的展示信息 {subject, version, source, count}，找不到返回 null。
+  function bankInfo(id) {
+    var b = getBank(id);
+    if (!b) return null;
+    return { subject: b.subject, version: b.version, source: b.source, count: b.points.length };
+  }
+
+  registerBank('hs-math', { subject: '高中数学', version: HS_BANK_VERSION, source: '人教版 2019 版', points: HS_BANK });
+  registerBank('demo', { subject: '演示', version: HS_BANK_VERSION, source: '演示数据', points: DEMO_BANK });
+
   // measureTagging(cases, bank)：量一次标注的准确率与低置信度比例（A6）。
   // cases: [{stem, expected}]，expected 是编号或编号数组（章内兄弟知识点
   // 靠关键词分不开的，多个都算命中，如复数概念/四则运算）。
@@ -902,6 +997,12 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     tagQuestion: tagQuestion,
     tagQuestions: tagQuestions,
     measureTagging: measureTagging,
+    registerBank: registerBank,
+    getBank: getBank,
+    listBanks: listBanks,
+    activeBank: activeBank,
+    setActiveBank: setActiveBank,
+    bankInfo: bankInfo,
     DEMO_BANK: DEMO_BANK,
     HS_BANK: HS_BANK,
     HS_BANK_VERSION: HS_BANK_VERSION
@@ -919,7 +1020,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 // 每条 tagged 带 source：'llm' 是模型标的，'keyword' 是调不通时关键词补位的，
 // 备注里写清来源，老师确认时知道这条是谁标的。
 // 关键约定：
-//   - 只调老师自己填的 OpenAI 兼容接口（默认 OpenRouter），Key 只存在这台浏览器里；
+//   - 只调老师自己填的 OpenAI 兼容接口（默认凌云 API，模型默认 deepseek-v4.1-flash），
+//     Key 只存在这台浏览器里；接口地址和模型都能改，改完记在浏览器本地；
 //   - 模型只从老师给的知识点库里挑编号，绝不自己编；
 //   - 某一批调不通时，用关键词标注补位，不让老师卡住；
 //     调不通包括三条（A6 实测过）：接口报错/断网、30 秒超时、返回格式错；
@@ -930,8 +1032,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   'use strict';
 
   var DEFAULT_BATCH = 10;
-  var DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
-  var DEFAULT_MODEL = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
+  var DEFAULT_BASE_URL = 'https://api.lingyunapi.xyz/v1';
+  var DEFAULT_MODEL = 'deepseek-v4.1-flash';
   // 调模型默认等 30 秒：接口一直不回就当调不通，用关键词补位，不让老师干等。
   var DEFAULT_TIMEOUT_MS = 30000;
 
@@ -1176,19 +1278,53 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   // 老师可以在页面上手改：下拉里选别的分类，或在“其他”里自己写。
   var CAUSES = ['概念不清', '审题错误', '计算失误', '方法不当', '书写规范'];
 
+  // 错因槽位：CAUSES 里的位置（0–4）。关键词规则按槽位走，显示的名字按配置走。
+  // 老师改名只是换五个槽位的标签，规则、计分、平局顺序都不动，所以默认五类时
+  // 归类结果一个字不变（调参集 14/14、新泛化集 17/20 都以此为准）。
+  var CAUSE_INDEX = {};
+  CAUSES.forEach(function (c, i) { CAUSE_INDEX[c] = i; });
+
+  // resolveCauses(custom)：把老师存的配置解成可用的五类名。
+  // custom 必须是 5 个非空、不重复的名字（字符串数组），否则回默认五类。
+  // 页面把配置存在浏览器本地 examReviewCauses 里；没存过就是默认五类。
+  function resolveCauses(custom) {
+    if (!Array.isArray(custom) || custom.length !== 5) return CAUSES.slice();
+    var seen = {};
+    for (var i = 0; i < 5; i++) {
+      var n = custom[i];
+      if (typeof n !== 'string') return CAUSES.slice();
+      n = n.trim();
+      if (n === '' || seen[n]) return CAUSES.slice();
+      seen[n] = true;
+    }
+    return custom.map(function (n) { return n.trim(); });
+  }
+
+  // 按默认名找它在五类里的槽位（0–4），找不到返回 -1。
+  // 已记的错卷按槽位改名用：名字换了，槽位不变，记录不丢。
+  function causeSlot(name) {
+    if (typeof name !== 'string') return -1;
+    return Object.prototype.hasOwnProperty.call(CAUSE_INDEX, name) ? CAUSE_INDEX[name] : -1;
+  }
+
   // 错因关键词（按分类计分，得分最高者胜；平局按 CAUSES 顺序取先者）。
   // 只用老师笔记里常见的说法：概念类用概念条件词（判别式、开口方向、
   // 定义域），方法类用方法名（特殊值法、设而不求、待定系数），不靠
   // “错”“不会”这类 bare 大词单独命中。
+  // A-4 又补了几组老师常写的说法（每组一条测试用例，见 test_cuojuan.js 第 10 节）：
+  //   抄错（抄错数字/符号是粗心算错的常见写法）、不考虑/没考虑（“忽略条件”
+  //   的口语说法）、不牢固/掌握不牢（“掌握不牢固”的标准说法）、综合运用
+  //   （综合运用能力）、讨论不全/讨论不完整（分类讨论没做全）。
   var CAUSE_RULES = [
-    { cause: '审题错误', kws: ['审题', '看错', '没看清', '没注意到', '没注意', '读题不清', '看漏', '忽略', '隐含条件', '题意', '没看', '看错题'] },
-    { cause: '概念不清', kws: ['概念不清', '概念模糊', '概念没懂', '定义不清', '定义没懂', '定义域', '含义不清', '认识不足', '理解不透', '掌握不透', '掌握不准确', '知识掌握', '公式记错', '公式记忆', '定理', '不会判断', '不会解', '掌握不够全面', '掌握不够透彻', '判别式', '开口方向'] },
-    { cause: '计算失误', kws: ['计算失误', '计算粗心', '计算不准确', '计算不足', '计算能力不足', '算错', '粗心', '运算', '化简', '求解不熟练', '变形'] },
-    { cause: '方法不当', kws: ['方法不当', '特殊值法', '设而不求', '韦达定理', '待定系数', '转化意识', '转化能力', '数形结合', '综合能力', '策略不足', '思路', '技巧', '分类讨论', '列项相消', '化为'] },
+    { cause: '审题错误', kws: ['审题', '看错', '没看清', '没注意到', '没注意', '读题不清', '看漏', '忽略', '隐含条件', '题意', '没看', '看错题', '不考虑', '没考虑'] },
+    { cause: '概念不清', kws: ['概念不清', '概念模糊', '概念没懂', '定义不清', '定义没懂', '定义域', '含义不清', '认识不足', '理解不透', '掌握不透', '掌握不准确', '知识掌握', '公式记错', '公式记忆', '定理', '不会判断', '不会解', '掌握不够全面', '掌握不够透彻', '判别式', '开口方向', '不牢固', '掌握不牢'] },
+    { cause: '计算失误', kws: ['计算失误', '计算粗心', '计算不准确', '计算不足', '计算能力不足', '算错', '粗心', '运算', '化简', '求解不熟练', '变形', '抄错'] },
+    { cause: '方法不当', kws: ['方法不当', '特殊值法', '设而不求', '韦达定理', '待定系数', '转化意识', '转化能力', '数形结合', '综合能力', '策略不足', '思路', '技巧', '分类讨论', '列项相消', '化为', '综合运用', '讨论不全', '讨论不完整'] },
     { cause: '书写规范', kws: ['书写', '格式不规范', '表达', '步骤不全', '逻辑混乱'] }
   ];
 
-  // classifyCause(text)：给一段错因描述归类，返回 5 类之一或 ''（未归类）。
+  // classifyCause(text, causes)：给一段错因描述归类，返回五类之一（按 causes 里的名字）
+  // 或 ''（未归类）。causes 不传或不合法时用默认五类。
   // 计分规则（A8 三条，见设计文档 A8）：
   //   1. 动词优先：操作动词（化简、变形、运算、求解）前面挂了“只/光/就/直接”
   //      时，说的是学生只做了这一步机械活，不算计算失误的证据；
@@ -1197,11 +1333,54 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   //      另一回事），给概念不清单独加 2 分；如“没把√81当作被开方数”。
   //   3. 题干优先：第一句常是题目的复述（问什么、考什么），里面的关键词
   //      不算错因证据；只有后面的句子里一个命中都没有，才回头用第一句。
+  // A-4 又加两条（见 REGEX_BONUS）：
+  //   4. 概念名词里的“运算”不算：运算法则、运算律说的是知识点本身，
+  //      不算计算失误的证据。
+  //   5. 句式加分：过程缺失（只写了答案、没写过程、步骤跳了）给书写规范
+  //      加 1 分；遗忘/不理解 + 概念内容（忘记了公式、不理解意义、概念
+  //      不理解）给概念不清加 2 分；公式记错/背错/写错/用错给概念不清加 1 分。
   // 其余规则不变：每类按命中的关键词个数计分（一个词只计一次），最高者胜；
   // 平局按 CAUSES 顺序取先者；一分没得返回 ''，进老师确认清单。一行里提到
   // 两类以上时 multiCause 由 parseCuojuanNotes 另外标出，这里只返回得分最高的一类。
+  // A14：计分全程按默认名算，最后一步才换成 causes 里对应槽位的名字，
+  // 所以改名不改变任何一句话的归类结果，只换显示的名字。
   var OP_VERBS = ['化简', '变形', '运算', '求解不熟练'];
   var NEGATION_RE = /没(有)?把[^，。；：]{0,12}(当作|看作|认作|理解为|当成)/;
+
+  // “运算”出现在概念名词里（运算法则、运算律）时不算计算失误的证据：
+  // 说的是知识点本身，不是算错了。跟 A8 的动词优先同一类处理。
+  function isNeutralizedCalcKw(text, idx, kw) {
+    if (kw !== '运算' || idx < 0) return false;
+    var after = text.slice(idx + 2, idx + 4);
+    return after === '法则' || after === '律';
+  }
+
+  // 句式加分（A-4）：关键词表够不着的老师常用句式，用正则补一分或两分。
+  // 每条只计一次；guard 是“这句里出现就跳过”的词（防误伤）。
+  //   过程缺失 → 书写规范：只写了答案、没写过程、步骤跳了、缺少验证。
+  //   遗忘/不理解 + 概念内容 → 概念不清：忘记了公式、不理解意义、概念不理解。
+  //   公式记错/背错/写错/用错 → 概念不清。
+  var REGEX_BONUS = [
+    { cause: '书写规范', re: /(只写了|只写|没写|缺少|漏了|跳了|少了)(答案|结果|过程|步骤|验证|检验|结论|单位|答语)/, points: 1 },
+    { cause: '书写规范', re: /(步骤|过程|验证|检验|结论|单位|答语)(跳了|少了|漏了|没写|不完整)/, points: 1 },
+    { cause: '概念不清', re: /(忘记|忘了|不记得|没记住|记不住)(了)?[^，。；：]{0,12}(公式|概念|定理|定义|性质|法则|知识点)/, points: 2 },
+    { cause: '概念不清', re: /(不|没)(理解|弄懂)[^，。；：]{0,16}(概念|定义|定理|公式|意义|关系|性质)/, points: 2, guard: '题意' },
+    { cause: '概念不清', re: /(概念|定义|定理|公式|意义|关系|性质)[^，。；：]{0,6}(不理解|没理解|理解不了|不明白|没弄懂)/, points: 2 },
+    { cause: '概念不清', re: /公式(记错|背错|写错|用错|记不住|背不出)/, points: 1 }
+  ];
+
+  // 一段文字里各句式加了多少分：{错因：分数}。
+  function regexBonus(text) {
+    var out = {};
+    for (var i = 0; i < REGEX_BONUS.length; i++) {
+      var b = REGEX_BONUS[i];
+      var m = text.match(b.re);
+      if (!m) continue;
+      if (b.guard && m[0].indexOf(b.guard) !== -1) continue;
+      out[b.cause] = (out[b.cause] || 0) + b.points;
+    }
+    return out;
+  }
 
   // 操作动词被“只/光/就/直接”修饰时不计分（动词优先）。
   function isNeutralizedOpVerb(text, idx, kw) {
@@ -1212,22 +1391,24 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     return false;
   }
 
-  // 一句里有没有错因证据（关键词命中，或否定句式），题干优先里用来判断
+  // 一句里有没有错因证据（关键词命中，或否定句式，或句式加分），题干优先里用来判断
   // 后面的句子值不值得单独算。
   function clauseHasHit(clause) {
     if (NEGATION_RE.test(clause)) return true;
+    if (Object.keys(regexBonus(clause)).length) return true;
     for (var i = 0; i < CAUSE_RULES.length; i++) {
       var kws = CAUSE_RULES[i].kws;
       for (var j = 0; j < kws.length; j++) {
         var idx = clause.indexOf(kws[j]);
-        if (idx !== -1 && !isNeutralizedOpVerb(clause, idx, kws[j])) return true;
+        if (idx !== -1 && !isNeutralizedOpVerb(clause, idx, kws[j]) && !isNeutralizedCalcKw(clause, idx, kws[j])) return true;
       }
     }
     return false;
   }
 
-  function classifyCause(text) {
+  function classifyCause(text, causes) {
     if (typeof text !== 'string' || text === '') return '';
+    var eff = resolveCauses(causes);
     var clauses = text.split(/[，；。：:]/).filter(function (c) { return c.trim() !== ''; });
     var body = clauses;
     if (clauses.length > 1) {
@@ -1240,21 +1421,32 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     }
     var scored = body.join('，');
     var scores = {};
-    var best = '', bestScore = 0;
     for (var i = 0; i < CAUSE_RULES.length; i++) {
       var rule = CAUSE_RULES[i];
       var score = 0;
       for (var j = 0; j < rule.kws.length; j++) {
         var kw = rule.kws[j];
         var idx = scored.indexOf(kw);
-        if (idx !== -1 && !isNeutralizedOpVerb(scored, idx, kw)) score++;
+        if (idx !== -1 && !isNeutralizedOpVerb(scored, idx, kw) && !isNeutralizedCalcKw(scored, idx, kw)) score++;
       }
       scores[rule.cause] = score;
-      if (score > bestScore) { bestScore = score; best = rule.cause; }
+    }
+    var bonus = regexBonus(scored);
+    for (var c in bonus) {
+      if (!Object.prototype.hasOwnProperty.call(bonus, c)) continue;
+      scores[c] = (scores[c] || 0) + bonus[c];
     }
     if (NEGATION_RE.test(scored)) {
       scores['概念不清'] = (scores['概念不清'] || 0) + 2;
-      if (scores['概念不清'] > bestScore) { bestScore = scores['概念不清']; best = '概念不清'; }
+    }
+    // 平局按 CAUSES 顺序取先者（概念不清在前）：A-4 修——原来按 CAUSE_RULES
+    // 的顺序取，概念不清与审题错误打平时会错取审题错误（调参集 Q2
+    // “没考虑定义域”就是这么被带偏的）。
+    // 最后一步才换名：计分用的默认名，返回 causes 里同一槽位的名字。
+    var best = '', bestScore = 0;
+    for (var k = 0; k < CAUSES.length; k++) {
+      var sc = scores[CAUSES[k]] || 0;
+      if (sc > bestScore) { bestScore = sc; best = eff[k]; }
     }
     return best;
   }
@@ -1296,15 +1488,19 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     return out.trim();
   }
 
-  // parseCuojuanNotes(text)：把粘贴的改卷笔记按行解析。
+  // parseCuojuanNotes(text, causes)：把粘贴的改卷笔记按行解析。
+  // causes 不传或不合法时用默认五类；传了就按老师改过的名字归类
+  // （归类结果不变，只换显示的名字，见 classifyCause）。
   // 每行一条，返回 { notes, skipped }：
   //   notes: [{ qid, typical, cause, multiCause }]，typical 是老师原话，
   //          cause 是 5 类之一或 ''（未归类，进老师确认清单），
   //          multiCause 表示这行提到了两类以上错因（取分最高的当主因）。
-  //   skipped: [{ line, reason }]，reason 是“没有题号”或“只有题号没有内容”。
+  //   skipped: [{ line, reason, qid }]，reason 是“没有题号”或“只有题号没有内容”，
+  //          qid 是行里认出的题号（没有题号时为 null）；A-4 起跳过的行进“未解析”
+  //          清单，老师手工补，不直接丢掉。
   // 同一题号出现两次，后一行覆盖前一行（mergeNotes 里处理，这里原样返回，
   // 顺序即粘贴顺序）。
-  function parseCuojuanNotes(text) {
+  function parseCuojuanNotes(text, causes) {
     var notes = [], skipped = [];
     if (typeof text !== 'string') return { notes: notes, skipped: skipped };
     var lines = text.split(/\r?\n/);
@@ -1312,13 +1508,13 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       var line = lines[i].trim();
       if (!line) continue;
       var qid = extractQid(line);
-      if (!qid) { skipped.push({ line: line, reason: '没有题号' }); continue; }
+      if (!qid) { skipped.push({ line: line, reason: '没有题号', qid: null }); continue; }
       var typical = stripQid(line, qid);
-      if (!typical) { skipped.push({ line: line, reason: '只有题号没有内容' }); continue; }
+      if (!typical) { skipped.push({ line: line, reason: '只有题号没有内容', qid: qid }); continue; }
       notes.push({
         qid: qid,
         typical: typical,
-        cause: classifyCause(typical),
+        cause: classifyCause(typical, causes),
         multiCause: causeHitCount(typical) > 1
       });
     }
@@ -1370,8 +1566,11 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
   globalThis.__cuojuan = {
     CAUSES: CAUSES,
+    resolveCauses: resolveCauses,
+    causeSlot: causeSlot,
     classifyCause: classifyCause,
     parseCuojuanNotes: parseCuojuanNotes,
+    stripQid: stripQid,
     attachSkill: attachSkill,
     mergeNotes: mergeNotes,
     formatNote: formatNote
@@ -1501,7 +1700,257 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     };
   }
 
-  globalThis.__wordExport = { buildWordDoc: buildWordDoc };
+  // ---------- 真 .docx 导出（A16）：纯 JS 的 OOXML，不依赖第三方包 ----------
+  // 一个 .docx 就是一个 ZIP：[Content_Types].xml + _rels/.rels +
+  // word/document.xml + word/styles.xml + docProps。条目用“存储”（不压缩），
+  // Word、WPS、LibreOffice 都能直接打开；A4 版式写在 document.xml 的 sectPr 里。
+  // buildDocx(items, meta) -> { filename, mime, bytes }，items 和 meta 的形状
+  // 与 buildWordDoc 完全一致；validateDocx(bytes, items) 在下载前自检：
+  // ZIP 头、结束记录、四个必需文件、段落标签成对、正文里每条知识点和每条
+  // 典型错法都在。Node 测试里再用 Python zipfile + ElementTree 复核一遍。
+
+  var CRC_TABLE = null;
+  function crcTable() {
+    if (CRC_TABLE) return CRC_TABLE;
+    var table = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c >>> 0;
+    }
+    CRC_TABLE = table;
+    return table;
+  }
+  function crc32(buf) {
+    var table = crcTable();
+    var c = 0xFFFFFFFF;
+    for (var i = 0; i < buf.length; i++) c = table[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function u16(n) { return [n & 0xFF, (n >> 8) & 0xFF]; }
+  function u32(n) { return [n & 0xFF, (n >> 8) & 0xFF, (n >> 16) & 0xFF, (n >> 24) & 0xFF]; }
+  function dosDateTime(d) {
+    return {
+      time: ((d.getHours() & 31) << 11) | ((d.getMinutes() & 63) << 5) | ((d.getSeconds() >> 1) & 31),
+      date: (((d.getFullYear() - 1980) & 127) << 9) | (((d.getMonth() + 1) & 15) << 5) | (d.getDate() & 31)
+    };
+  }
+  // zipStore(entries)：[{name, data: Uint8Array}] -> Uint8Array。
+  // 只写存储条目（method 0），不压缩；文件名标 UTF-8（flag bit 11）。
+  function zipStore(entries) {
+    var dt = dosDateTime(new Date());
+    var local = [];
+    var central = [];
+    var offset = 0;
+    entries.forEach(function (e) {
+      var nameBytes = new TextEncoder().encode(e.name);
+      var data = e.data;
+      var crc = crc32(data);
+      var lh = [0x50, 0x4B, 0x03, 0x04].concat(u16(20), u16(0x0800), u16(0), u16(dt.time), u16(dt.date), u32(crc), u32(data.length), u32(data.length), u16(nameBytes.length), u16(0));
+      local.push(new Uint8Array(lh), nameBytes, data);
+      var ch = [0x50, 0x4B, 0x01, 0x02].concat(u16(20), u16(20), u16(0x0800), u16(0), u16(dt.time), u16(dt.date), u32(crc), u32(data.length), u32(data.length), u16(nameBytes.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset));
+      central.push(new Uint8Array(ch), nameBytes);
+      offset += lh.length + nameBytes.length + data.length;
+    });
+    var cdSize = central.reduce(function (a, b) { return a + b.length; }, 0);
+    var eocd = [0x50, 0x4B, 0x05, 0x06].concat(u16(0), u16(0), u16(entries.length), u16(entries.length), u32(cdSize), u32(offset), u16(0));
+    var parts = local.concat(central, [new Uint8Array(eocd)]);
+    var total = parts.reduce(function (a, b) { return a + b.length; }, 0);
+    var out = new Uint8Array(total);
+    var pos = 0;
+    parts.forEach(function (p) { out.set(p, pos); pos += p.length; });
+    return out;
+  }
+
+  function xmlEscape(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+  function docxPara(text, style) {
+    var s = '<w:p>';
+    if (style) {
+      s += '<w:pPr><w:pStyle w:val="' + style + '"/>' + (style === 'Title' ? '<w:jc w:val="center"/>' : '') + '</w:pPr>';
+    }
+    s += '<w:r><w:rPr><w:rFonts w:ascii="SimSun" w:hAnsi="SimSun" w:eastAsia="宋体" w:cs="SimSun"/></w:rPr>' +
+      '<w:t xml:space="preserve">' + xmlEscape(text) + '</w:t></w:r></w:p>';
+    return s;
+  }
+  function docxItemParas(item) {
+    var skill = item && item.skill;
+    var skillName = item && typeof item.skillName === 'string' ? item.skillName : '';
+    var topQ = item && item.topQ !== null && item.topQ !== undefined && item.topQ !== ''
+      ? item.topQ
+      : '本次考试未直接考到';
+    var out = [];
+    out.push(docxPara(skill + ' 号' + (skillName ? ' · ' + skillName : '') + '知识点', 'Heading2'));
+    out.push(docxPara('掌握度：' + formatMastery(item && item.mastery)));
+    out.push(docxPara('班级得分率：' + formatAcc(item && item.acc)));
+    out.push(docxPara('错题示例：' + topQ));
+    // 典型错卷（A17）：有就逐条写，没有就不写这一行，和 .doc、Markdown 同一行文案。
+    var cj = item && Array.isArray(item.cuojuan) ? item.cuojuan : [];
+    for (var ci = 0; ci < cj.length; ci++) {
+      var n = cj[ci] || {};
+      out.push(docxPara('典型错法（第 ' + n.q + ' 题）：' + (n.typical || '') +
+        '；错因：' + (n.cause || '未归类（待确认）')));
+    }
+    out.push(docxPara(adviceFor(item && item.kind)));
+    return out;
+  }
+  var DOCX_CONTENT_TYPES =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+    '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+    '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+    '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>' +
+    '</Types>';
+  var DOCX_RELS =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
+    '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>' +
+    '</Relationships>';
+  var DOCX_STYLES =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="SimSun" w:hAnsi="SimSun" w:eastAsia="宋体" w:cs="SimSun"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="zh-CN" w:eastAsia="zh-CN"/></w:rPr></w:rPrDefault>' +
+    '<w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
+    '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="120" w:line="360" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="SimSun" w:hAnsi="SimSun" w:eastAsia="宋体" w:cs="SimSun"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:jc w:val="center"/><w:spacing w:after="240"/></w:pPr><w:rPr><w:b/><w:sz w:val="44"/><w:szCs w:val="44"/></w:rPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="Heading1"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="4" w:color="999999"/></w:pBdr><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="Heading2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="180" w:after="60"/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr></w:style>' +
+    '</w:styles>';
+  var DOCX_APP =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+    '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">' +
+    '<Application>教师讲评助手</Application></Properties>';
+  function docxCoreXml(meta) {
+    var date = (meta && meta.date) ? String(meta.date) : new Date().toISOString().slice(0, 10);
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+      '<dc:title>讲评提纲</dc:title><dc:creator>教师讲评助手</dc:creator>' +
+      '<dcterms:created xsi:type="dcterms:W3CDTF">' + xmlEscape(date) + '</dcterms:created></cp:coreProperties>';
+  }
+  function buildDocumentXml(items, meta) {
+    var list = Array.isArray(items) ? items : [];
+    var m = meta && typeof meta === 'object' ? meta : {};
+    var title = m.title ? String(m.title) : '讲评提纲';
+    var parts = [];
+    parts.push('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
+    parts.push('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>');
+    parts.push(docxPara(title, 'Title'));
+    if (m.examName) parts.push(docxPara('考试：' + m.examName));
+    if (m.className) parts.push(docxPara('班级：' + m.className));
+    if (m.date) parts.push(docxPara('日期：' + m.date));
+    var focus = [];
+    var next = [];
+    var i;
+    for (i = 0; i < list.length; i++) {
+      if (list[i] && list[i].kind === '下次覆盖') next.push(list[i]);
+      else focus.push(list[i]);
+    }
+    if (list.length === 0) {
+      parts.push(docxPara('本次考试没有掌握度偏低的知识点'));
+    } else {
+      parts.push(docxPara('重点讲', 'Heading1'));
+      if (focus.length === 0) parts.push(docxPara('本次考试没有需要重点讲的知识点。'));
+      for (i = 0; i < focus.length; i++) parts.push.apply(parts, docxItemParas(focus[i]));
+      parts.push(docxPara('下次考试覆盖', 'Heading1'));
+      if (next.length === 0) parts.push(docxPara('本次考试没有需要下次考试覆盖的知识点。'));
+      for (i = 0; i < next.length; i++) parts.push.apply(parts, docxItemParas(next[i]));
+    }
+    // A4：210mm × 297mm，上下左右边距 2.54cm。
+    parts.push('<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>');
+    parts.push('</w:body></w:document>');
+    return parts.join('');
+  }
+  function buildDocx(items, meta) {
+    var enc = new TextEncoder();
+    var entries = [
+      { name: '[Content_Types].xml', data: enc.encode(DOCX_CONTENT_TYPES) },
+      { name: '_rels/.rels', data: enc.encode(DOCX_RELS) },
+      { name: 'word/document.xml', data: enc.encode(buildDocumentXml(items, meta)) },
+      { name: 'word/styles.xml', data: enc.encode(DOCX_STYLES) },
+      { name: 'docProps/core.xml', data: enc.encode(docxCoreXml(meta)) },
+      { name: 'docProps/app.xml', data: enc.encode(DOCX_APP) }
+    ];
+    return {
+      filename: '讲评提纲.docx',
+      mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      bytes: zipStore(entries)
+    };
+  }
+  // 读回存储条目（只认 method 0）：结构不对返回 null。
+  function readStoredEntries(bytes) {
+    if (!bytes || bytes.length < 30) return null;
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    var pos = 0;
+    var out = {};
+    while (pos + 30 <= bytes.length) {
+      if (view.getUint32(pos, true) !== 0x04034b50) break;
+      var method = view.getUint16(pos + 8, true);
+      var nameLen = view.getUint16(pos + 26, true);
+      var extraLen = view.getUint16(pos + 28, true);
+      var size = view.getUint32(pos + 18, true);
+      var nameStart = pos + 30;
+      var dataStart = nameStart + nameLen + extraLen;
+      if (dataStart + size > bytes.length) return null;
+      if (method !== 0) return null;
+      var name = new TextDecoder().decode(bytes.subarray(nameStart, nameStart + nameLen));
+      out[name] = bytes.subarray(dataStart, dataStart + size);
+      pos = dataStart + size;
+    }
+    return out;
+  }
+  // 下载前自检：ZIP 头、结束记录、四个必需文件、段落标签成对、
+  // 正文里每条知识点和每条典型错法都在。返回 {ok, problems, documentXml}。
+  function validateDocx(bytes, items) {
+    var problems = [];
+    var b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+    if (b.length < 4 || b[0] !== 0x50 || b[1] !== 0x4B || b[2] !== 0x03 || b[3] !== 0x04) {
+      problems.push('文件头不是 ZIP（PK）');
+    }
+    var eocdFound = false;
+    var i;
+    for (i = b.length - 22; i >= 0 && i >= b.length - 65557; i--) {
+      if (b[i] === 0x50 && b[i + 1] === 0x4B && b[i + 2] === 0x05 && b[i + 3] === 0x06) { eocdFound = true; break; }
+    }
+    if (!eocdFound) problems.push('找不到 ZIP 结束记录');
+    var entries = readStoredEntries(b);
+    if (!entries) {
+      problems.push('ZIP 结构读不出来（只认无压缩的存储条目）');
+      return { ok: false, problems: problems, documentXml: '' };
+    }
+    ['[Content_Types].xml', '_rels/.rels', 'word/document.xml', 'word/styles.xml'].forEach(function (n) {
+      if (!entries[n]) problems.push('缺文件：' + n);
+    });
+    var docXml = '';
+    if (entries['word/document.xml']) docXml = new TextDecoder().decode(entries['word/document.xml']);
+    if (docXml) {
+      var openP = (docXml.match(/<w:p>/g) || []).length;
+      var closeP = (docXml.match(/<\/w:p>/g) || []).length;
+      if (openP === 0 || openP !== closeP) problems.push('document.xml 段落标签不成对（' + openP + '/' + closeP + '）');
+      (items || []).forEach(function (it) {
+        var label = (it.skill || '') + ' 号';
+        if (docXml.indexOf(label) === -1) problems.push('正文里找不到 ' + label + ' 的条目');
+        (it.cuojuan || []).forEach(function (n) {
+          var line = xmlEscape('典型错法（第 ' + n.q + ' 题）：' + (n.typical || ''));
+          if (docXml.indexOf(line) === -1) problems.push('正文里找不到第 ' + n.q + ' 题的典型错法行');
+        });
+      });
+    }
+    return { ok: problems.length === 0, problems: problems, documentXml: docXml };
+  }
+
+  globalThis.__wordExport = { buildWordDoc: buildWordDoc, buildDocx: buildDocx, validateDocx: validateDocx, crc32: crc32 };
 })();
 
 </script>
@@ -2076,6 +2525,7 @@ function setTagMetaFromMap(map, source) {
   });
 }
 let cuojuan = {};       // {qid: {qid, typical, cause, skill}} 典型错卷，老师改卷时记的
+let cjUnparsed = [];   // 没解析出来的行 [{line, reason, qid}]，老师手工补或忽略，不直接丢掉
 let rows = [];          // {student, q, s(0-based), y}
 let diagnosis = null;
 let audit = [];
@@ -2255,16 +2705,61 @@ function isValidSkillId(v) { return Number.isInteger(v) && ((v >= 1 && v <= 123)
 // 诊断引擎只有 123 个槽位，旧编号直接占位（编号-1），高中库编号按首次出现
 // 顺序占空闲槽位；显示时再由 skillLabel 把槽位翻回知识点编号和名称。
 let slotKC = {};
-// 按编号找知识点名：先高中库，再演示库（旧编号）。
-function kcNameById(id) {
+// ---------- KC 库注册表（A20）：标注、诊断、提纲、导出都从这里取库 ----------
+// 产品只认注册表里的库，不再直接读 HS_BANK / DEMO_BANK 两个硬编码变量。
+// 首发学科是高中数学（'hs-math'）；演示库（'demo'）走同一结构。
+function bankPoints(id) {
   try {
     const t = window.__kcTagger;
-    if (t) {
-      const hs = t.HS_BANK && t.HS_BANK.find(x => x.id === id);
-      if (hs) return hs.name || '';
-      const d = t.DEMO_BANK && t.DEMO_BANK.find(x => x.id === id);
-      if (d) return d.name || '';
+    if (!t || !t.getBank) return null;
+    const b = t.getBank(id);
+    return b ? b.points : null;
+  } catch (err) { return null; }
+}
+// 当前学科的库（默认高中数学）：关键词标注、LLM 候选、拆题表下拉都用它。
+function activeBankPoints() {
+  try {
+    const t = window.__kcTagger;
+    if (t && t.activeBank) {
+      const b = t.activeBank();
+      if (b && b.points) return b.points;
     }
+  } catch (err) {}
+  try {
+    const t = window.__kcTagger;
+    return (t && t.HS_BANK) || (t && t.DEMO_BANK) || [];
+  } catch (err) { return []; }
+}
+// 当前学科的展示信息 {subject, version, source, count}，页脚、后台、测试共用。
+function activeBankMeta() {
+  try {
+    const t = window.__kcTagger;
+    if (t && t.activeBank) {
+      const b = t.activeBank();
+      if (b) return { subject: b.subject, version: b.version, source: b.source, count: b.points.length };
+    }
+  } catch (err) {}
+  return { subject: '高中数学', version: '2026-11-14', source: '人教版 2019 版', count: 85 };
+}
+// 一句话库信息：诊断页、提纲页页脚（A21）和第 2 步标注区共用。
+function bankLineText() {
+  const m = activeBankMeta();
+  return `知识点库：${m.subject} · ${m.version}（${m.source}），${m.count} 个知识点`;
+}
+function renderBankInfoLine() {
+  const el = document.getElementById('bankInfoLine');
+  if (!el) return;
+  el.textContent = '本次标注用' + bankLineText() + '。';
+}
+// 按编号找知识点名：先当前学科库，再演示库（旧编号）。
+function kcNameById(id) {
+  try {
+    const hs = activeBankPoints();
+    const h = hs && hs.find(x => x.id === id);
+    if (h) return h.name || '';
+    const d = bankPoints('demo');
+    const dd = d && d.find(x => x.id === id);
+    if (dd) return dd.name || '';
   } catch (err) {}
   return '';
 }
@@ -2282,7 +2777,7 @@ function skillShort(s) {
 // 演示词库里有的知识点显示中文名（如 92 号 · 一次函数应用），没有的只显示编号。
 function skillName(s) {
   try {
-    const bank = window.__kcTagger && window.__kcTagger.DEMO_BANK;
+    const bank = bankPoints('demo');
     const e = bank && bank.find(x => x.id === s + 1);
     return e ? ` · ${e.name}` : '';
   } catch (err) { return ''; }
@@ -2417,15 +2912,14 @@ function markLowConfConfirmed(qid) {
   syncSplitNote(it.idx, v);
   renderLowConfList();
 }
-// LLM 用的知识点库：高中库（85 个，教材语言）+ 演示词库（旧编号，
+// LLM 用的知识点库：当前学科库（高中数学 85 个，教材语言）+ 演示词库（旧编号，
 // 老师拿初中卷来也能标）+ 已上传对应表里的知识点（名称能显示的显示）。
 function buildLLMBank() {
   const bank = [];
   const seen = {};
-  const t = window.__kcTagger;
-  const hs = (t && t.HS_BANK) || [];
+  const hs = activeBankPoints();
   hs.forEach(e => { bank.push({ id: e.id, name: e.name }); seen[e.id] = true; });
-  const demo = (t && t.DEMO_BANK) || [];
+  const demo = bankPoints('demo') || [];
   demo.forEach(e => { if (!seen[e.id]) { bank.push({ id: e.id, name: e.name }); seen[e.id] = true; } });
   if (kcMap) Object.values(kcMap).forEach(id => {
     if (!seen[id]) { bank.push({ id, name: kcNameById(id) }); seen[id] = true; }
@@ -2458,8 +2952,8 @@ function readLLMSettingsFromForm() {
 }
 function runKeywordTag(qs) {
   if (!window.__kcTagger) { document.getElementById('kcMsg').innerHTML = '标注模块没加载上，请刷新页面再试。'; return null; }
-  // 关键词标注默认用高中库（教材语言）；演示词库只留给演示数据和 LLM 的库。
-  const bank = window.__kcTagger.buildKCBank(window.__kcTagger.HS_BANK || window.__kcTagger.DEMO_BANK);
+  // 关键词标注默认用当前学科库（教材语言）；演示词库只留给演示数据和 LLM 的库。
+  const bank = window.__kcTagger.buildKCBank(activeBankPoints());
   const tagged = window.__kcTagger.tagQuestions(qs, bank);
   const res = applyTagged(tagged, bank, '关键词', qs);
   lowConfList = buildLowConfItems(tagged, qs, bank, '关键词');
@@ -2468,10 +2962,101 @@ function runKeywordTag(qs) {
   logAudit(`自动标注知识点：预填 ${res.filled} 道，${res.low} 道待确认`);
   return res;
 }
+// ---------- 错因分类设置（A14）：五类错因的名字老师可以改 ----------
+// 五类是五个槽位，名字只是标签：改名换的是显示的名字，关键词规则、计分、
+// 平局顺序都不动，所以改名不改变任何一句话的归类结果（调参集仍是 14/14，
+// 新泛化集仍是 17/20）。配置存在浏览器本地 examReviewCauses 里。
+const CAUSES_DEFAULT = ['概念不清', '审题错误', '计算失误', '方法不当', '书写规范'];
+function loadCauses() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem('examReviewCauses');
+      if (raw && window.__cuojuan && window.__cuojuan.resolveCauses) {
+        return window.__cuojuan.resolveCauses(JSON.parse(raw));
+      }
+    }
+  } catch (e) {}
+  return CAUSES_DEFAULT.slice();
+}
+let effectiveCauses = loadCauses();
+// 已记的错卷按槽位改名：错因是默认名或旧有效名时，换成新名字里同一槽位的名字；
+// 找不到槽位的（老师手写的名字）原样保留，不丢。
+function migrateCuojuanCauses(oldNames, newNames) {
+  Object.values(cuojuan).forEach(n => {
+    if (!n || !n.cause) return;
+    let idx = oldNames.indexOf(n.cause);
+    if (idx === -1) idx = CAUSES_DEFAULT.indexOf(n.cause);
+    if (idx !== -1) n.cause = newNames[idx];
+  });
+}
+// 错因下拉（第 2 步单条输入 + 拆题表）按当前有效的名字拼。
+function refreshCauseDropdowns() {
+  const sel = document.getElementById('cjCause');
+  if (!sel) return;
+  const cur = sel.value;
+  let h = '<option value="">未归类（待确认）</option>';
+  effectiveCauses.forEach(c => { h += `<option value="${esc(c)}">${esc(c)}</option>`; });
+  sel.innerHTML = h;
+  if (cur && effectiveCauses.indexOf(cur) !== -1) sel.value = cur;
+}
+// 错因分类设置区的 5 个输入框（第 i 类对应 causeName{i}）。
+function renderCauseSettings() {
+  const el = document.getElementById('causeSettings');
+  if (!el) return;
+  el.innerHTML = effectiveCauses.map((c, i) =>
+    `<label>第 ${i + 1} 类 <input type="text" id="causeName${i}" value="${esc(c)}" style="width:120px" aria-label="错因第 ${i + 1} 类名称"></label>`
+  ).join(' ');
+}
+// 保存错因分类：读 5 个输入框，5 个非空、不重名才保存；
+// 已记的错卷按槽位改名，不丢；新记的错卷和诊断、提纲里都用新名字。
+// 测试直接调这个函数（vm 里按钮的 addEventListener 是空桩）。
+function saveCauseSettings() {
+  const names = [];
+  for (let i = 0; i < 5; i++) {
+    const el = document.getElementById('causeName' + i);
+    names.push(el ? el.value.trim() : '');
+  }
+  const msg = document.getElementById('causeMsg');
+  const seen = {};
+  let bad = names.some(n => n === '');
+  names.forEach(n => { if (seen[n]) bad = true; seen[n] = true; });
+  if (bad) {
+    if (msg) msg.textContent = '名字不能为空，也不能两类同名，请改好再保存。';
+    return false;
+  }
+  const oldNames = effectiveCauses.slice();
+  const changed = [];
+  oldNames.forEach((o, i) => { if (o !== names[i]) changed.push(o + '→' + names[i]); });
+  effectiveCauses = names;
+  if (changed.length) {
+    try { if (typeof localStorage !== 'undefined') localStorage.setItem('examReviewCauses', JSON.stringify(names)); } catch (e) {}
+  }
+  migrateCuojuanCauses(oldNames, names);
+  refreshCauseDropdowns();
+  renderCauseSettings();
+  renderCuojuan();
+  if (msg) msg.textContent = changed.length ? '已保存：' + changed.join('、') + '。新记的错卷和诊断、提纲里都用新名字。' : '名字没变，不用保存。';
+  if (changed.length) logAudit('改错因分类：' + changed.join('、'));
+  return true;
+}
+// 恢复默认五类：配置清掉，已记的错卷按槽位改回默认名。
+function resetCauseSettings() {
+  const oldNames = effectiveCauses.slice();
+  effectiveCauses = CAUSES_DEFAULT.slice();
+  try { if (typeof localStorage !== 'undefined') localStorage.removeItem('examReviewCauses'); } catch (e) {}
+  migrateCuojuanCauses(oldNames, effectiveCauses);
+  refreshCauseDropdowns();
+  renderCauseSettings();
+  renderCuojuan();
+  const msg = document.getElementById('causeMsg');
+  if (msg) msg.textContent = '已恢复默认五类：概念不清、审题错误、计算失误、方法不当、书写规范。';
+  logAudit('错因分类恢复默认五类');
+  return true;
+}
 // ---------- 典型错卷（v1.4）：逐条加 + 粘贴笔记解析 ----------
-// 错因下拉选项（静态写在模板里）；拆题表里的错因下拉在这里拼。
+// 错因下拉选项（按当前有效的名字拼）；拆题表里的错因下拉在这里拼。
 function cuojuanCauseOptions(selected) {
-  const causes = (window.__cuojuan && window.__cuojuan.CAUSES) || ['概念不清', '审题错误', '计算失误', '方法不当', '书写规范'];
+  const causes = effectiveCauses || CAUSES_DEFAULT;
   let h = '<option value="">未归类（待确认）</option>';
   causes.forEach(c => { h += `<option value="${esc(c)}"${c === selected ? ' selected' : ''}>${esc(c)}</option>`; });
   return h;
@@ -2509,6 +3094,43 @@ window.delCuojuan = function (qid) {
   delete cuojuan[qid];
   renderCuojuan();
   logAudit(`删掉第 ${qid} 题的典型错卷`);
+};
+// 没解析出来的行（A-4）：原行 + 原因列出来，老师手工补或忽略，不直接丢掉。
+// “填回上面”把行里的题号（认出来时）和内容填回单条输入框，老师改完点保存；
+// 只有题号没有内容的那种行，内容框留空等老师补。
+function renderCjUnparsed() {
+  const el = document.getElementById('cjUnparsed');
+  if (!el) return;
+  if (!cjUnparsed.length) { el.innerHTML = ''; return; }
+  let html = '<table><caption>没解析出来的行（请手工补或忽略）</caption><thead><tr><th scope="col">原行</th><th scope="col">原因</th><th scope="col">操作</th></tr></thead><tbody>';
+  cjUnparsed.forEach((r, i) => {
+    html += `<tr><td>${esc(r.line)}</td><td>${esc(r.reason)}</td><td><button class="small ghost" onclick="fillCjUnparsed(${i})">填回上面</button> <button class="small danger" onclick="dismissCjUnparsed(${i})">忽略</button></td></tr>`;
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+window.fillCjUnparsed = function (i) {
+  const r = cjUnparsed[i];
+  if (!r) return;
+  if (r.qid) {
+    document.getElementById('cjQid').value = r.qid;
+    // 行里的题号前缀去掉，只留错法内容；只有题号没有内容的那种行，内容框留空等老师补。
+    document.getElementById('cjTypical').value = window.__cuojuan ? window.__cuojuan.stripQid(r.line, r.qid) : r.line;
+  } else {
+    document.getElementById('cjTypical').value = r.line;
+  }
+  cjUnparsed.splice(i, 1);
+  renderCjUnparsed();
+  document.getElementById('cjTypical').focus();
+  toast(r.qid ? '已填回上面，改完点“加一条典型错卷”保存。' : '已填回上面：这行没认出题号，请补上题号再点保存。');
+  logAudit('手工补没解析的错卷行');
+};
+window.dismissCjUnparsed = function (i) {
+  const r = cjUnparsed[i];
+  if (!r) return;
+  cjUnparsed.splice(i, 1);
+  renderCjUnparsed();
+  logAudit(`忽略没解析的错卷行：${r.line.slice(0, 20)}`);
 };
 // 某几道题的错卷记录（原始对象，供 Markdown/Word 导出用）。
 function cuojuanNotesForQuestions(qids) {
@@ -2796,9 +3418,155 @@ function buildSummary(st) {
   ];
 }
 
+// ---------- A11：某道题全班得分分布（纯函数） ----------
+// 满分 / 部分得分 / 0 分各多少人 + 平均得分率；统计页点开某题就看这个。
+function scoreDistribution(rows, qid) {
+  let n = 0, full = 0, partial = 0, zero = 0, sum = 0;
+  (rows || []).forEach(r => {
+    if (String(r.q) !== String(qid)) return;
+    n++; sum += r.y;
+    if (r.y === 1) full++;
+    else if (r.y === 0) zero++;
+    else partial++;
+  });
+  return { n, full, partial, zero, avg: n ? sum / n : 0 };
+}
+
+// ---------- A12：诊断结论一句话（纯函数，规则生成） ----------
+// 最弱的知识点 + 错得最多的题号 + 错的人次 + 掌握度；表格在下面当证据。
+function diagnosisSummary(d) {
+  if (!d) return '还没有诊断结果。';
+  const { mastery, testedN, missQ, order } = d;
+  const tested = order.filter(s => testedN[s] >= 3);
+  if (!tested.length) return '本次考试没有考到 3 人次以上的知识点，先看下面的掌握度表。';
+  const s = tested[0];
+  const entries = Object.entries(missQ[s] || {}).sort((a, b) => b[1] - a[1]);
+  const totalMiss = entries.reduce((a, [, n]) => a + n, 0);
+  const topQ = entries.slice(0, 3).map(([q, n]) => `第 ${q} 题 ${n} 人`).join('、') || '没有哪道题特别集中';
+  return `这次最弱的是 ${skillLabel(s)}：${topQ}没得满分，一共 ${totalMiss} 人次，掌握度 ${mastery[s].toFixed(2)}。建议先讲这个知识点的概念，再讲这几道错题。`;
+}
+
+// ---------- A13：学生分组（纯函数） ----------
+// 按有证据的最弱知识点（最多 5 个）上的平均掌握度分三组，每组一句话讲评建议。
+// 边界老师可调，默认 0.5 / 0.7，存在浏览器本地；调完重算。
+let groupCuts = { low: 0.5, high: 0.7 };
+function loadGroupCuts() {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const s = JSON.parse(localStorage.getItem('examReviewGroupCuts') || '{}');
+    if (s && typeof s.low === 'number' && typeof s.high === 'number' && s.low >= 0 && s.low < s.high && s.high <= 1) {
+      groupCuts = { low: s.low, high: s.high };
+    }
+  } catch (e) {}
+}
+function groupStudents(perStudent, weakSkills, lowCut, highCut) {
+  const groups = [
+    { key: 'low', name: '基础巩固组', advice: '先补这个知识点的概念，再跟全班讲评，课后练 3 道同类基础题。', members: [] },
+    { key: 'mid', name: '稳固提高组', advice: '跟着讲评走，重点看错题的解题步骤，课后练 1–2 道变式题。', members: [] },
+    { key: 'high', name: '掌握较好组', advice: '讲评时可以先自己讲一遍，再帮同桌看一道错题。', members: [] }
+  ];
+  if (!weakSkills || !weakSkills.length) return groups;
+  Object.entries(perStudent || {}).forEach(([sid, m]) => {
+    const v = weakSkills.reduce((a, s) => a + m[s], 0) / weakSkills.length;
+    const g = v < lowCut ? groups[0] : v < highCut ? groups[1] : groups[2];
+    g.members.push({ sid, v });
+  });
+  groups.forEach(g => g.members.sort((a, b) => a.v - b.v));
+  return groups;
+}
+function renderGroups() {
+  const el = document.getElementById('groupOut');
+  if (!el || !diagnosis) return;
+  const weakTested = diagnosis.order.filter(s => diagnosis.testedN[s] >= 3).slice(0, 5);
+  if (!weakTested.length) { el.innerHTML = '<p class="muted">没有考到 3 人次以上的知识点，分组先不排。</p>'; return; }
+  const groups = groupStudents(diagnosis.perStudent, weakTested, groupCuts.low, groupCuts.high);
+  const weakNames = weakTested.map(s => skillLabel(s)).join('、');
+  let html = `<p class="muted">按最弱的 ${weakTested.length} 个知识点（${esc(weakNames)}）上的平均掌握度分组；边界可以改，改完分组马上重算。</p>`;
+  html += `<p><label>巩固组上限 <input type="number" id="groupLowCut" min="0" max="1" step="0.05" value="${groupCuts.low}" style="width:70px" aria-label="基础巩固组上限"> </label>` +
+    `<label>提高组上限 <input type="number" id="groupHighCut" min="0" max="1" step="0.05" value="${groupCuts.high}" style="width:70px" aria-label="稳固提高组上限"> </label>` +
+    `<button class="small secondary" onclick="applyGroupCuts()">改完重算分组</button> <span class="muted" id="groupCutMsg"></span></p>`;
+  groups.forEach(g => {
+    html += `<h4>${g.name}（${g.members.length} 人）</h4><p>${esc(g.advice)}</p>`;
+    html += g.members.length
+      ? `<p>${g.members.map(m => `<span class="badge inf">${esc(m.sid)} · ${m.v.toFixed(2)}</span>`).join(' ')}</p>`
+      : '<p class="muted">这组没人。</p>';
+  });
+  el.innerHTML = html;
+}
+// 分组边界改完重算：要 0 ≤ 巩固组上限 < 提高组上限 ≤ 1，不对就拒绝并恢复原值。
+window.applyGroupCuts = function () {
+  const lowEl = document.getElementById('groupLowCut');
+  const highEl = document.getElementById('groupHighCut');
+  const low = lowEl ? Number(lowEl.value) : NaN;
+  const high = highEl ? Number(highEl.value) : NaN;
+  if (isNaN(low) || isNaN(high) || low < 0 || low >= high || high > 1) {
+    // 先重画（把输入框恢复成已保存的边界），再写提示——反过来写会被重画擦掉。
+    renderGroups();
+    const msg2 = document.getElementById('groupCutMsg');
+    if (msg2) msg2.textContent = '边界不对：要 0 ≤ 巩固组上限 < 提高组上限 ≤ 1。';
+    return false;
+  }
+  groupCuts = { low, high };
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem('examReviewGroupCuts', JSON.stringify(groupCuts)); } catch (e) {}
+  renderGroups();
+  logAudit(`分组边界改成 ${low} / ${high}，分组已重算`);
+  return true;
+};
+
+// ---------- A15：提纲顺序、删除恢复、版本号（纯函数 + 状态） ----------
+// 拖拽/上移下移/删/恢复都走同一条路：改完版本号 +1，旧版留着能查，删掉的进已删列表。
+// 版本号和历史只在本次打开里有效；上传记录里的提纲快照跟着最新版走。
+let outlineVersion = 1;
+let outlineHistory = [];
+let deletedItems = [];
+function snapshotOutline() {
+  return { version: outlineVersion, items: (window._outline || []).map(it => ({ s: it.s, kind: it.kind, mastery: it.mastery })), time: new Date().toLocaleTimeString() };
+}
+function bumpOutlineVersion(reason) {
+  outlineVersion++;
+  outlineHistory.push(snapshotOutline());
+  if (outlineHistory.length > 10) outlineHistory = outlineHistory.slice(-10);
+  attachOutlineSnapshot();
+  logAudit(`提纲改成第 ${outlineVersion} 版（${reason}）`);
+}
+function moveOutlineItem(items, from, to) {
+  const list = (items || []).slice();
+  if (from < 0 || from >= list.length || to < 0 || to >= list.length || from === to) return list;
+  const [it] = list.splice(from, 1);
+  list.splice(to, 0, it);
+  return list;
+}
+window.reorderOutline = function (from, to) {
+  const next = moveOutlineItem(window._outline, from, to);
+  if (next === window._outline || JSON.stringify(next.map(i => i.s)) === JSON.stringify(window._outline.map(i => i.s))) return false;
+  window._outline = next;
+  bumpOutlineVersion('拖拽调整顺序');
+  renderOutline();
+  return true;
+};
+window.restoreItem = function (idx) {
+  const d = deletedItems[idx];
+  if (!d) return false;
+  deletedItems.splice(idx, 1);
+  const at = Math.min(Math.max(d.from, 0), window._outline.length);
+  window._outline.splice(at, 0, d.item);
+  bumpOutlineVersion('恢复已删的提纲项');
+  renderOutline();
+  return true;
+};
+window.showOutlineVersion = function (v) {
+  const snap = outlineHistory.find(h => h.version === v);
+  const el = document.getElementById('outlineHistoryView');
+  if (!el || !snap) return;
+  el.innerHTML = `<h4>第 ${snap.version} 版（${esc(snap.time)}）</h4>` +
+    (snap.items.length
+      ? snap.items.map((it, i) => `<p>${i + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${esc(skillLabel(it.s))}知识点（掌握度 ${it.mastery.toFixed(2)}）</p>`).join('')
+      : '<p class="muted">这版没有提纲项。</p>');
+};
+
 // expose pure core for Node testing
-if (typeof window !== 'undefined') window.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, getTagMeta: () => tagMeta, setTagMetaFromMap, MODEL };
-if (typeof globalThis !== 'undefined') globalThis.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, getTagMeta: () => tagMeta, setTagMetaFromMap, MODEL };
+if (typeof window !== 'undefined') window.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, getTagMeta: () => tagMeta, setTagMetaFromMap, scoreDistribution, diagnosisSummary, groupStudents, getGroupCuts: () => groupCuts, moveOutlineItem, getOutlineVersion: () => outlineVersion, getOutlineHistory: () => outlineHistory, getDeletedItems: () => deletedItems, getOutline: () => window._outline, getUnparsedCuojuan: () => cjUnparsed, getCauses: () => effectiveCauses.slice(), getBankInfo: () => activeBankMeta(), getBankLine: () => bankLineText(), MODEL };
+if (typeof globalThis !== 'undefined') globalThis.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, getTagMeta: () => tagMeta, setTagMetaFromMap, scoreDistribution, diagnosisSummary, groupStudents, getGroupCuts: () => groupCuts, moveOutlineItem, getOutlineVersion: () => outlineVersion, getOutlineHistory: () => outlineHistory, getDeletedItems: () => deletedItems, getOutline: () => window._outline, getUnparsedCuojuan: () => cjUnparsed, getCauses: () => effectiveCauses.slice(), getBankInfo: () => activeBankMeta(), getBankLine: () => bankLineText(), MODEL };
 
 // 空白格处理状态（A3）：每张表载入时重置；老师点了批量处理才算处理完，
 // 处理完之前“确认成绩表”按钮点不动；处理记录进审计。
@@ -3103,17 +3871,25 @@ document.getElementById('cjParseBtn').addEventListener('click', () => {
   const text = document.getElementById('cjBox').value;
   if (!window.__cuojuan) { document.getElementById('cjMsg').textContent = '错卷模块没加载上，请刷新页面再试。'; return; }
   if (!text.trim()) { document.getElementById('cjMsg').textContent = '粘贴框是空的：先把改卷笔记粘贴进来，每行一条。'; return; }
-  const res = window.__cuojuan.parseCuojuanNotes(text);
+  const res = window.__cuojuan.parseCuojuanNotes(text, effectiveCauses);
   cuojuan = window.__cuojuan.mergeNotes(cuojuan, res.notes);
   refreshCuojuanSkills();
+  // 没解析出来的行不直接丢：攒进下面的清单，老师手工补或忽略；重复粘贴同一行不重复列。
+  // （A-4：原来只在提示里数了个数，行本身丢了。）
+  res.skipped.forEach(s => {
+    if (!cjUnparsed.some(u => u.line === s.line)) cjUnparsed.push(s);
+  });
+  renderCjUnparsed();
   const unclassified = res.notes.filter(n => !n.cause).length;
   document.getElementById('cjMsg').textContent =
     `解析出 ${res.notes.length} 条典型错卷` +
     (unclassified ? `，其中 ${unclassified} 条错因没归上类，请在上面表里逐条确认` : '') +
-    (res.skipped.length ? `；${res.skipped.length} 行没认出来（${res.skipped[0].reason}），已跳过` : '') + '。';
+    (cjUnparsed.length ? `；${cjUnparsed.length} 行没解析出来，列在下面，请手工补或忽略` : '') + '。';
   logAudit(`解析改卷笔记：${res.notes.length} 条典型错卷，${res.skipped.length} 行跳过`);
 });
 
+document.getElementById('causeSaveBtn').addEventListener('click', saveCauseSettings);
+document.getElementById('causeResetBtn').addEventListener('click', resetCauseSettings);
 let paperImageFile = null;
 function selectPaperFile(f) {
   if (/\.pdf$/i.test(f.name)) {
@@ -3226,15 +4002,14 @@ document.getElementById('splitBtn').addEventListener('click', () => {
   });
   const kcOpts = [];
   try {
-    const t = window.__kcTagger;
-    const all = ((t && t.HS_BANK) || []).concat((t && t.DEMO_BANK) || []);
+    const all = activeBankPoints().concat(bankPoints('demo') || []);
     all.forEach(e => { kcOpts.push(`<option value="${e.id}" label="${esc(e.name)}"></option>`); });
   } catch (err) {}
   html += '</tbody></table><datalist id="kcDatalist">' + kcOpts.join('') + '</datalist>';
   const attr = v => esc(String(v || '')).replace(/"/g, '&quot;');
   html += '</tbody></table><p><button id="autoTagBtn" class="secondary">自动标注知识点</button> <button id="llmTagBtn" class="secondary">智能标注（LLM）</button> <button id="applySplitBtn" class="secondary">用这份对应关系</button></p>';
   html += '<div id="lowConfOut"></div>';
-  html += '<div class="llm-settings"><p class="muted">智能标注用你自己的 Key 调模型（默认 OpenRouter），Key 只存在这台浏览器里，不会上传到别处。调不通时自动改用关键词标注。</p>' +
+  html += '<div class="llm-settings"><p class="muted">智能标注用你自己的 Key 调模型（默认凌云 API），Key 只存在这台浏览器里，不会上传到别处。调不通时自动改用关键词标注。</p>' +
     `<p><label>接口地址 <input type="text" id="llmBaseUrl" value="${attr(llmSettings.baseUrl)}" aria-label="LLM 接口地址" style="width:250px"></label> ` +
     `<label>模型 <input type="text" id="llmModel" value="${attr(llmSettings.model)}" aria-label="LLM 模型" style="width:280px"></label></p>` +
     `<p><label>API Key <input type="password" id="llmKey" value="${attr(llmSettings.apiKey)}" aria-label="LLM API Key" style="width:280px" autocomplete="off"></label> ` +
@@ -3297,7 +4072,7 @@ document.getElementById('splitBtn').addEventListener('click', () => {
     if (statusEl) statusEl.textContent = '正在调模型标注…';
     try {
       const bank = buildLLMBank();
-      const kwBank = window.__kcTagger ? window.__kcTagger.buildKCBank(window.__kcTagger.HS_BANK || window.__kcTagger.DEMO_BANK) : [];
+      const kwBank = window.__kcTagger ? window.__kcTagger.buildKCBank(activeBankPoints()) : [];
       const res = await window.__llmTagger.tagQuestionsLLM(qs, bank, {
         fetchFn: fetch.bind(window), baseUrl: s.baseUrl, apiKey: s.apiKey, model: s.model,
         fallback: bqs => window.__kcTagger ? window.__kcTagger.tagQuestions(bqs, kwBank) : bqs.map(q => ({ qid: q.qid, ranked: [] }))
@@ -3317,6 +4092,36 @@ document.getElementById('splitBtn').addEventListener('click', () => {
     btn.classList.remove('loading');
   });
 });
+// 统计页渲染（A11）：每项指标旁一句话口径；点“看分布”看该题全班得分分布。
+// renderStats(st, norm) 单独抽出来，测试直接调，不用点按钮。
+function renderStats(st, norm) {
+  const sum = buildSummary(st);
+  let html = `<div class="kpi-row">` + sum.map(k => `<div class="kpi"><b>${k.value}</b><span>${k.label}</span></div>`).join('') + `</div>`;
+  html += `<p>学生 ${st.nStudents} 人 · 题目 ${st.nQuestions} 道 · 作答 ${st.nRows} 条 · 整体正确率 ${(st.fullRate * 100).toFixed(1)}% · 平均得分率 ${(st.acc * 100).toFixed(1)}%` +
+    (norm.skippedNoKC ? ` · ${norm.skippedNoKC} 条作答没有知识点对应关系，已跳过` : '') +
+    (norm.skippedNoSlot ? ` · ${norm.skippedNoSlot} 条作答的知识点超出诊断容量，已跳过` : '') +
+    (norm.skippedBlank ? ` · ${norm.skippedBlank} 个空格已跳过` : '') + '</p>';
+  html += `<p class="muted">口径：整体正确率 = 得满分的作答 ÷ 全部作答；平均得分率 = 每道题得分 ÷ 满分的均值（4/5 分算 0.8，满分算 1，0 分算 0）；每题“正确率”= 该题得满分的人 ÷ 做过这道题的人；每题“平均得分率”= 该题得分 ÷ 满分的均值。空白格不算 0 分，按缺考处理。</p>`;
+  html += `<h3>每题正确率（从低到高）</h3><p class="muted">点“看分布”看这道题全班的得分分布：满分、部分得分、0 分各多少人。</p><table><caption>每题正确率</caption><thead><tr><th scope="col">题号</th><th scope="col">知识点</th><th scope="col" class="num">做过人数</th><th scope="col" class="num">正确率</th><th scope="col" class="num">平均得分率</th><th scope="col">得分分布</th></tr></thead><tbody>`;
+  st.byQ.forEach(x => {
+    const d = scoreDistribution(rows, x.q);
+    html += `<tr><td>第 ${x.q} 题</td><td>${kcMap[x.q] || '—'} 号</td><td class="num">${x.n}</td><td class="num">${(x.fullRate * 100).toFixed(0)}%</td><td class="num">${(x.acc * 100).toFixed(0)}%</td><td><button class="small ghost" data-qdist="${x.q}" onclick="toggleQDist(${x.q})">看分布</button></td></tr>`;
+    html += `<tr class="dist-row hidden" id="qdist-${x.q}"><td colspan="6">满分 ${d.full} 人 · 部分得分 ${d.partial} 人 · 0 分 ${d.zero} 人 · 平均得分率 ${(d.avg * 100).toFixed(0)}%` +
+      `<div class="tier-bar" role="img" aria-label="第 ${x.q} 题得分分布：满分 ${d.full} 人，部分得分 ${d.partial} 人，0 分 ${d.zero} 人"><i class="seg strong" style="width:${d.n ? (d.full / d.n * 100).toFixed(1) : 0}%"></i><i class="seg mid" style="width:${d.n ? (d.partial / d.n * 100).toFixed(1) : 0}%"></i><i class="seg weak" style="width:${d.n ? (d.zero / d.n * 100).toFixed(1) : 0}%"></i></div></td></tr>`;
+  });
+  html += `</tbody></table><h3>每知识点得分率</h3><p class="muted">得分率 = 该知识点上得分 ÷ 满分的均值；作答数是这知识点上被考到的总人次。</p><table><caption>每知识点得分率</caption><thead><tr><th scope="col">知识点</th><th scope="col" class="num">作答数</th><th scope="col" class="num">得分率</th><th scope="col"></th></tr></thead><tbody>`;
+  st.byS.forEach(x => { html += `<tr><td>${skillLabel(x.s)}</td><td class="num">${x.n}</td><td class="num">${(x.acc * 100).toFixed(0)}%</td><td><div class="mini-bar"><i style="width:${Math.round(x.acc * 100)}%"></i></div></td></tr>`; });
+  html += '</tbody></table>';
+  document.getElementById('statsOut').innerHTML = html;
+}
+// 看分布开关：点开显示该题全班得分分布，再点收起；按钮文字跟着状态变。
+window.toggleQDist = function (qid) {
+  const row = document.getElementById('qdist-' + qid);
+  if (!row) return;
+  const hiddenNow = row.classList.toggle('hidden');
+  const btn = document.querySelector('#statsOut button[data-qdist="' + qid + '"]');
+  if (btn) btn.textContent = hiddenNow ? '看分布' : '收起';
+};
 document.getElementById('toStage3').addEventListener('click', () => {
   if (!kcMap) { document.getElementById('kcMsg').innerHTML = '请先上传对应表，或者用 OCR 拆题并确认知识点。'; return; }
   const norm = normalizeToLong(gradebook, kcMap);
@@ -3324,18 +4129,7 @@ document.getElementById('toStage3').addEventListener('click', () => {
   slotKC = norm.slotMap || {};
   if (!rows.length) { document.getElementById('kcMsg').innerHTML = '成绩表和对应表对不上，没有能用的作答。请检查题号是否一致。'; return; }
   const st = computeStats(rows);
-  const sum = buildSummary(st);
-  let html = `<div class="kpi-row">` + sum.map(k => `<div class="kpi"><b>${k.value}</b><span>${k.label}</span></div>`).join('') + `</div>`;
-  html += `<p>学生 ${st.nStudents} 人 · 题目 ${st.nQuestions} 道 · 作答 ${st.nRows} 条 · 整体正确率 ${(st.fullRate * 100).toFixed(1)}% · 平均得分率 ${(st.acc * 100).toFixed(1)}%` +
-    (norm.skippedNoKC ? ` · ${norm.skippedNoKC} 条作答没有知识点对应关系，已跳过` : '') +
-    (norm.skippedNoSlot ? ` · ${norm.skippedNoSlot} 条作答的知识点超出诊断容量，已跳过` : '') +
-    (norm.skippedBlank ? ` · ${norm.skippedBlank} 个空格已跳过` : '') + '</p>';
-  html += `<h3>每题正确率（从低到高）</h3><table><caption>每题正确率</caption><thead><tr><th scope="col">题号</th><th scope="col">知识点</th><th scope="col" class="num">做过人数</th><th scope="col" class="num">正确率</th><th scope="col" class="num">平均得分率</th></tr></thead><tbody>`;
-  st.byQ.forEach(x => { html += `<tr><td>第 ${x.q} 题</td><td>${kcMap[x.q] || '—'} 号</td><td class="num">${x.n}</td><td class="num">${(x.fullRate * 100).toFixed(0)}%</td><td class="num">${(x.acc * 100).toFixed(0)}%</td></tr>`; });
-  html += `</tbody></table><h3>每知识点得分率</h3><table><caption>每知识点得分率</caption><thead><tr><th scope="col">知识点</th><th scope="col" class="num">作答数</th><th scope="col" class="num">得分率</th><th scope="col"></th></tr></thead><tbody>`;
-  st.byS.forEach(x => { html += `<tr><td>${skillLabel(x.s)}</td><td class="num">${x.n}</td><td class="num">${(x.acc * 100).toFixed(0)}%</td><td><div class="mini-bar"><i style="width:${Math.round(x.acc * 100)}%"></i></div></td></tr>`; });
-  html += '</tbody></table>';
-  document.getElementById('statsOut').innerHTML = html;
+  renderStats(st, norm);
   if (kcMap) recordUploadSkills([...new Set(Object.values(kcMap))]);
   show('stage3'); setStep(3);
   logAudit('确认试卷，进入统计');
@@ -3396,7 +4190,9 @@ function renderDiagnosis() {
   const tiers = tierCounts(mastery);
   const total = tiers['强'] + tiers['中'] + tiers['弱'];
   const pct = n => (n / total * 100).toFixed(1);
-  let html = `<div class="tier-bar" role="img" aria-label="掌握度分层：较好 ${tiers['强']} 个，中等 ${tiers['中']} 个，偏弱 ${tiers['弱']} 个">
+  // A12：结论先给一句话（规则生成），表格在下面当证据。
+  let html = `<p class="diag-summary"><b>结论：</b>${esc(diagnosisSummary(diagnosis))}</p>`;
+  html += `<div class="tier-bar" role="img" aria-label="掌握度分层：较好 ${tiers['强']} 个，中等 ${tiers['中']} 个，偏弱 ${tiers['弱']} 个">
     <i class="seg strong" style="width:${pct(tiers['强'])}%"></i><i class="seg mid" style="width:${pct(tiers['中'])}%"></i><i class="seg weak" style="width:${pct(tiers['弱'])}%"></i>
   </div>
   <div class="tier-legend">
@@ -3435,16 +4231,14 @@ function renderDiagnosis() {
   });
   html += `</tbody></table><p class="muted">先列考到过的知识点（按掌握度从低到高，最多 15 个），再补没考到的推断项。推断项本次考试没考到，讲评时只作“下次覆盖”的参考。` +
     (Object.keys(cuojuan).length ? `本次记了 ${Object.keys(cuojuan).length} 条典型错卷，标在上面错得最多的题后面；错因没归上类的请回第 2 步改。` : '') + `</p>`;
+  // A21：诊断页页脚显示本次用的 KC 库学科与版本。
+  html += `<p class="muted">${bankLineText()}</p>`;
   const weakTested = order.filter(s => testedN[s] >= 3).slice(0, 5);
   if (weakTested.length) {
-    const stu = Object.entries(diagnosis.perStudent).map(([sid, m]) => ({
-      sid, v: weakTested.reduce((a, s) => a + m[s], 0) / weakTested.length
-    })).sort((a, b) => a.v - b.v).slice(0, 8);
-    html += `<h3>最需要关注的学生（按有证据的最弱知识点掌握度排序）</h3><table><caption>最需要关注的学生</caption><thead><tr><th scope="col">学生</th><th scope="col" class="num">弱项掌握度</th></tr></thead><tbody>`;
-    stu.forEach(x => { html += `<tr><td>${esc(x.sid)}</td><td class="num">${x.v.toFixed(2)}</td></tr>`; });
-    html += `</tbody></table>`;
+    html += `<h3>学生分组（按最弱知识点掌握度）</h3><div id="groupOut"></div>`;
   }
   document.getElementById('diagOut').innerHTML = html;
+  renderGroups();
   attachDiagnosisSummary();
 }
 function buildOutline() {
@@ -3462,8 +4256,8 @@ function buildOutline() {
 }
 function renderOutline() {
   const items = window._outline;
-  let html = '';
-  if (!items.length) html = '<p class="muted">本次考试没有掌握度偏低的知识点，讲评可按错题顺序进行。</p>';
+  let html = `<p class="muted">提纲第 ${outlineVersion} 版 · 改动自动保存：按住拖动调顺序，点“上移 / 下移”也行；删掉的在下面能恢复；旧版点开能查。</p>`;
+  if (!items.length) html += '<p class="muted">本次考试没有掌握度偏低的知识点，讲评可按错题顺序进行。</p>';
   items.forEach((it, idx) => {
     const s = it.s;
     const topQEntries = Object.entries(diagnosis.missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
@@ -3474,8 +4268,8 @@ function renderOutline() {
     // 典型错卷进提纲：重点讲的题下面多一行典型错法和错因，老师照着讲。
     const cjLines = cuojuanLinesForQuestions(topQEntries.map(([q]) => q));
     const cjHtml = cjLines.length ? cjLines.map(l => `<p class="muted">${l}</p>`).join('') : '';
-    html += `<div class="outline-item" data-idx="${idx}">
-      <div class="oi-head"><h4${it.kind === '讲' ? ' class="mark-weak"' : ''}>${idx + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${skillLabel(s)}知识点</h4>
+    html += `<div class="outline-item" draggable="true" data-idx="${idx}" ondragstart="event.dataTransfer.setData('text/plain', ${idx}); window._dragIdx = ${idx};" ondragover="event.preventDefault();" ondrop="event.preventDefault(); reorderOutline(window._dragIdx, ${idx});">
+      <div class="oi-head"><h4${it.kind === '讲' ? ' class="mark-weak"' : ''}><span class="drag-handle" title="按住拖动调整顺序">⋮⋮</span>${idx + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${skillLabel(s)}知识点</h4>
       <span class="rowbtns"><button class="small ghost" onclick="moveItem(${idx},-1)">上移</button>
       <button class="small ghost" onclick="moveItem(${idx},1)">下移</button>
       <button class="small danger" onclick="delItem(${idx})">删</button></span></div>
@@ -3485,11 +4279,26 @@ function renderOutline() {
       <p class="muted">${it.kind === '讲' ? '建议：先讲概念，再讲错题，最后变式练一道。' : '建议：这次先不讲，下次考试出题覆盖这个知识点。'}</p>
     </div>`;
   });
-  html += `<div class="warn">讲评顺序可以改：点“上移 / 下移”调整，点“删”去掉。改完点下面导出，拿着就能上课。</div>`;
+  if (deletedItems.length) {
+    html += `<h3>已删（${deletedItems.length}）</h3><p class="muted">删掉的提纲项在这里，点“恢复”放回去。</p>`;
+    deletedItems.forEach((d, i) => {
+      html += `<div class="outline-item deleted-item"><p>${d.item.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${esc(skillLabel(d.item.s))}知识点（掌握度 ${d.item.mastery.toFixed(2)}） <button class="small secondary" onclick="restoreItem(${i})">恢复</button></p></div>`;
+    });
+  }
+  if (outlineHistory.length > 1) {
+    html += `<h3>旧版</h3><p class="muted">每次改动版本号 +1，旧版留着能查（只读）。</p><p>` +
+      outlineHistory.map(h => `<button class="small ghost" onclick="showOutlineVersion(${h.version})">第 ${h.version} 版</button>`).join(' ') + `</p><div id="outlineHistoryView"></div>`;
+  }
+  html += `<div class="warn">讲评顺序可以改：按住拖动，或点“上移 / 下移”调整；点“删”去掉，删掉的在上面能恢复。改完点下面导出，拿着就能上课。</div>`;
+  // A21：提纲页页脚显示本次用的 KC 库学科与版本。
+  html += `<p class="muted">${bankLineText()}</p>`;
   document.getElementById('outlineOut').innerHTML = html;
 }
 document.getElementById('toStage5').addEventListener('click', () => {
   window._outline = buildOutline();
+  outlineVersion = 1;
+  outlineHistory = [snapshotOutline()];
+  deletedItems = [];
   renderOutline();
   attachOutlineSnapshot();
   show('stage5'); setStep(5);
@@ -3498,13 +4307,21 @@ document.getElementById('toStage5').addEventListener('click', () => {
 window.moveItem = function (idx, d) {
   const items = window._outline;
   const j = idx + d;
-  if (j < 0 || j >= items.length) return;
-  [items[idx], items[j]] = [items[j], items[idx]];
+  if (j < 0 || j >= items.length) return false;
+  const next = moveOutlineItem(items, idx, j);
+  window._outline = next;
+  bumpOutlineVersion('上移/下移调整顺序');
   renderOutline();
+  return true;
 };
 window.delItem = function (idx) {
+  const it = window._outline[idx];
+  if (!it) return false;
+  deletedItems.push({ item: it, from: idx });
   window._outline.splice(idx, 1);
+  bumpOutlineVersion('删掉一项');
   renderOutline();
+  return true;
 };
 function buildOutlineMd() {
   const items = window._outline || [];
@@ -3521,6 +4338,45 @@ function buildOutlineMd() {
   });
   return md;
 }
+// 导出用的条目（Markdown / .doc / .docx 三处共用同一份）：知识点、掌握度、
+// 得分率、错题示例、典型错卷。改了这里，三处导出一起变，不会各写各的。
+function buildExportItems() {
+  return (window._outline || []).map(it => {
+    const s = it.s, d = diagnosis;
+    const topQEntries = Object.entries(d.missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const topQ = topQEntries.map(([q, n]) => `第 ${q} 题（${n} 人错）`).join('、') || null;
+    const kc = slotKC[s];
+    return { kind: it.kind, skill: kc ? kc.id : s + 1, skillName: kc ? kc.name : '', mastery: it.mastery, acc: d.testedN[s] ? d.testedC[s] / d.testedN[s] : null, topQ,
+      cuojuan: cuojuanNotesForQuestions(topQEntries.map(([q]) => q)).map(n => ({ q: n.qid, typical: n.typical, cause: n.cause || '' })) };
+  });
+}
+// .docx 预览的 HTML 版：和 docx 是同一份内容（标题、两组、每条的掌握度、
+// 得分率、错题示例、典型错法、建议），老师下载前先看到讲义长什么样。
+function docxPreviewHtml(items) {
+  let html = '<h4>讲评提纲</h4>';
+  const focus = (items || []).filter(i => i.kind !== '下次覆盖');
+  const next = (items || []).filter(i => i.kind === '下次覆盖');
+  if (!items.length) return html + '<p>本次考试没有掌握度偏低的知识点</p>';
+  html += '<h5>重点讲</h5>';
+  if (!focus.length) html += '<p class="muted">本次考试没有需要重点讲的知识点。</p>';
+  focus.forEach(it => {
+    html += `<div class="outline-item"><h4>${it.skill} 号${it.skillName ? ' · ' + esc(it.skillName) : ''}知识点</h4>` +
+      `<p>掌握度：${it.mastery.toFixed(2)}</p><p>班级得分率：${it.acc === null || it.acc === undefined ? '本次考试未考' : Math.round(it.acc * 100) + '%'}</p>` +
+      `<p>错题示例：${esc(it.topQ || '本次考试未直接考到')}</p>` +
+      (it.cuojuan || []).map(n => `<p class="muted">典型错法（第 ${n.q} 题）：${esc(n.typical || '')}；错因：${esc(n.cause || '未归类（待确认）')}</p>`).join('') +
+      `<p class="muted">${it.kind === '下次覆盖' ? '建议：这次先不讲，下次考试出题覆盖这个知识点。' : '建议：先讲概念，再讲错题，最后变式练一道。'}</p></div>`;
+  });
+  html += '<h5>下次考试覆盖</h5>';
+  if (!next.length) html += '<p class="muted">本次考试没有需要下次考试覆盖的知识点。</p>';
+  next.forEach(it => {
+    html += `<div class="outline-item"><h4>${it.skill} 号${it.skillName ? ' · ' + esc(it.skillName) : ''}知识点</h4>` +
+      `<p>掌握度：${it.mastery.toFixed(2)}</p><p>班级得分率：${it.acc === null || it.acc === undefined ? '本次考试未考' : Math.round(it.acc * 100) + '%'}</p>` +
+      `<p>错题示例：${esc(it.topQ || '本次考试未直接考到')}</p>` +
+      (it.cuojuan || []).map(n => `<p class="muted">典型错法（第 ${n.q} 题）：${esc(n.typical || '')}；错因：${esc(n.cause || '未归类（待确认）')}</p>`).join('') +
+      `<p class="muted">建议：这次先不讲，下次考试出题覆盖这个知识点。</p></div>`;
+  });
+  return html;
+}
 document.getElementById('exportBtn').addEventListener('click', () => {
   const md = buildOutlineMd();
   const blob = new Blob([md], { type: 'text/markdown' });
@@ -3535,28 +4391,44 @@ document.getElementById('exportBtn').addEventListener('click', () => {
   logAudit('导出讲评提纲');
   toast('讲评提纲已导出（.md）');
 });
+// 真 .docx 导出（A16）：点按钮先出预览 + 校验，确认后才下载。
+// 校验不过不下载，页面上写清哪一项不对。
+let pendingDocx = null;
 document.getElementById('exportWordBtn').addEventListener('click', () => {
-  if (!window.__wordExport) { document.getElementById('exportText').value = 'Word 导出模块没加载上，请刷新页面再试。'; document.getElementById('exportFallback').classList.remove('hidden'); return; }
-  const items = (window._outline || []).map(it => {
-    const s = it.s, d = diagnosis;
-    const topQEntries = Object.entries(d.missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
-    const topQ = topQEntries.map(([q, n]) => `第 ${q} 题（${n} 人错）`).join('、') || null;
-    const kc = slotKC[s];
-    return { kind: it.kind, skill: kc ? kc.id : s + 1, skillName: kc ? kc.name : '', mastery: it.mastery, acc: d.testedN[s] ? d.testedC[s] / d.testedN[s] : null, topQ,
-      cuojuan: cuojuanNotesForQuestions(topQEntries.map(([q]) => q)).map(n => ({ q: n.qid, typical: n.typical, cause: n.cause || '' })) };
-  });
-  const doc = window.__wordExport.buildWordDoc(items, { title: '讲评提纲', date: new Date().toISOString().slice(0, 10) });
-  const blob = new Blob([doc.content], { type: doc.mime });
+  if (!window.__wordExport || !window.__wordExport.buildDocx) {
+    document.getElementById('docxCheckMsg').textContent = 'Word 导出模块没加载上，请刷新页面再试。';
+    document.getElementById('docxPreview').classList.remove('hidden');
+    return;
+  }
+  const items = buildExportItems();
+  const doc = window.__wordExport.buildDocx(items, { title: '讲评提纲', date: new Date().toISOString().slice(0, 10) });
+  const v = window.__wordExport.validateDocx(doc.bytes, items);
+  pendingDocx = doc;
+  document.getElementById('docxPreviewBody').innerHTML = docxPreviewHtml(items);
+  document.getElementById('docxCheckMsg').textContent = v.ok
+    ? `已校验：文件格式正确，内容与页面一致（${items.length} 项）。点“确认下载”拿 .docx。`
+    : '校验没通过：' + v.problems.join('；') + '。先别下载，请把这句话告诉管理员。';
+  document.getElementById('docxConfirmBtn').disabled = !v.ok;
+  document.getElementById('docxPreview').classList.remove('hidden');
+  logAudit('导出 Word（.docx）预览已生成' + (v.ok ? '，校验通过' : '，校验没通过'));
+});
+document.getElementById('docxConfirmBtn').addEventListener('click', () => {
+  if (!pendingDocx) return;
+  const blob = new Blob([pendingDocx.bytes], { type: pendingDocx.mime });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = doc.filename;
+  a.download = pendingDocx.filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  document.getElementById('exportText').value = doc.content;
-  document.getElementById('exportFallback').classList.remove('hidden');
-  logAudit('导出讲评提纲（Word）');
-  toast('Word 文档已导出');
+  document.getElementById('docxPreview').classList.add('hidden');
+  pendingDocx = null;
+  logAudit('导出讲评提纲（Word .docx）');
+  toast('Word 文档已导出（.docx）');
+});
+document.getElementById('docxCancelBtn').addEventListener('click', () => {
+  document.getElementById('docxPreview').classList.add('hidden');
+  pendingDocx = null;
 });
 document.getElementById('copyBtn').addEventListener('click', () => {
   const md = buildOutlineMd();
@@ -3703,10 +4575,14 @@ function renderAdminPanel() {
   const stats = a.adminStats(users, collectAllUploads());
   if (statsEl) statsEl.innerHTML = `<p>老师账号 ${stats.teachers} 个（在用 ${stats.activeTeachers} 个） · 本地考试 ${stats.exams} 次 · 题目 ${stats.questions} 道 · 作答 ${stats.answers} 条 · 知识点覆盖 ${stats.skillsCovered} 个</p>`;
   if (kcEl) {
+    // KC 库版本信息（A21）：从注册表取，学科、版本、点数三样都在。
     const t = window.__kcTagger;
-    const hs = (t && t.HS_BANK) || [];
-    const ver = (t && t.HS_BANK_VERSION) || '2026-11-14';
-    kcEl.innerHTML = `<p>高中数学 KC 库：${hs.length} 个知识点（1001–1085），${ver} 版。演示词库：${((t && t.DEMO_BANK) || []).length} 个知识点。</p>`;
+    const banks = (t && t.listBanks) ? t.listBanks() : [];
+    const hs = banks.find(b => b.id === 'hs-math');
+    const demo = banks.find(b => b.id === 'demo');
+    const hsText = hs ? `高中数学 KC 库：${hs.count} 个知识点（1001–1085），${hs.version} 版` : '高中数学 KC 库：85 个知识点（1001–1085），2026-11-14 版';
+    const demoText = demo ? `演示词库：${demo.count} 个知识点` : '演示词库：5 个知识点';
+    kcEl.innerHTML = `<p>${hsText}。${demoText}。</p>`;
   }
   if (usersEl) {
     usersEl.innerHTML = users.length
@@ -3764,7 +4640,11 @@ setAuthMode('login');
 loadUploads();
 renderUploads();
 loadLLMSettings();
+loadGroupCuts();
 renderCuojuan();
+refreshCauseDropdowns();
+renderCauseSettings();
+renderBankInfoLine();
 renderTemplateExample();
 wireDensityBtn('densityBtn3');
 wireDensityBtn('densityBtn4');
