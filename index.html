@@ -317,8 +317,8 @@ textarea:focus { border-color: var(--step); outline: 2px solid var(--step); outl
 .issue.block { background: var(--error-bg); border-color: var(--error-border); color: var(--error-fg); }
 .audit { font-size: var(--text-xs); color: var(--muted); line-height: var(--leading-body); }
 .audit li { margin: 4px 0; }
-input[type=text], input[type=number], input[type=password] { height: 40px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); font-size: var(--text-body); font-family: inherit; background: var(--surface); color: var(--fg); caret-color: var(--step); }
-input[type=text]:focus, input[type=number]:focus, input[type=password]:focus { border-color: var(--step); outline: 2px solid var(--step); outline-offset: 1px; }
+input[type=text], input[type=email], input[type=number], input[type=password] { height: 40px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); font-size: var(--text-body); font-family: inherit; background: var(--surface); color: var(--fg); caret-color: var(--step); }
+input[type=text]:focus, input[type=email]:focus, input[type=number]:focus, input[type=password]:focus { border-color: var(--step); outline: 2px solid var(--step); outline-offset: 1px; }
 input[type=file] { font-size: var(--text-sm); color: var(--muted-2); }
 input[type=file]::file-selector-button { background: var(--surface-muted); color: var(--fg); border: 0; border-radius: var(--radius-md); min-height: 36px; padding: 0 14px; font-size: var(--text-sm); font-weight: 600; cursor: pointer; margin-right: 10px; }
 #ocrText { min-height: 160px; }
@@ -330,7 +330,7 @@ input[type=file]::file-selector-button { background: var(--surface-muted); color
 @media print {
   @page { size: A4; margin: 15mm; }
   body { background: #fff; color: #000; font-size: 12pt; }
-  header, .steps, .progress, .toast, button, input, .dropzone, #exportFallback, .density-btn, #auditCard { display: none !important; }
+  header, .steps, .progress, .toast, button, input, .dropzone, #exportFallback, .density-btn, #auditCard, .site-nav, .site-footer, #authCard, #adminCard { display: none !important; }
   main { max-width: 100%; padding: 0; }
   .card { box-shadow: none; border: 1px solid #ccc; border-radius: 0; break-inside: avoid; margin-bottom: 12px; animation: none; }
   .outline-item { break-inside: avoid; }
@@ -396,10 +396,54 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ---------- 下一站（v1.6）：站点头尾 + 登录/后台 ---------- */
+.site-nav { max-width: 1080px; margin: 0 auto 16px; display: flex; gap: 16px; align-items: center; justify-content: space-between; }
+.nav-links { display: flex; gap: 4px; flex-wrap: wrap; }
+.nav-links a { color: var(--fg); text-decoration: none; font-size: var(--text-sm); font-weight: 600; padding: 8px 12px; border-radius: var(--radius-md); }
+.nav-links a:hover { background: var(--surface-muted); text-decoration: none; }
+.nav-right { display: flex; gap: 8px; align-items: center; flex: none; }
+.nav-login { min-height: 36px; padding: 0 16px; }
+.user-chip { display: inline-flex; gap: 8px; align-items: center; font-size: var(--text-sm); color: var(--fg); background: var(--surface-subtle); border: 1px solid var(--border); border-radius: var(--radius-full); padding: 4px 6px 4px 14px; max-width: 60vw; }
+.user-chip #userEmail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-chip.hidden, .field-grid.hidden { display: none; }
+.site-footer { border-top: 1px solid var(--border-strong); padding: 32px 24px 24px; background: var(--surface); }
+.footer-cols { max-width: 1080px; margin: 0 auto 20px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.footer-col h3 { margin: 0 0 10px; font-size: var(--text-sm); font-weight: 700; }
+.footer-col p { margin: 4px 0; font-size: var(--text-sm); line-height: var(--leading-body); color: var(--muted); }
+.footer-col ul { margin: 4px 0; padding-left: 18px; font-size: var(--text-sm); color: var(--muted); }
+.footer-col a { color: var(--fg); }
+.footer-bottom { max-width: 1080px; margin: 0 auto; display: flex; gap: 16px; align-items: center; justify-content: space-between; font-size: var(--text-xs); color: var(--muted); border-top: 1px solid var(--border-subtle); padding-top: 16px; }
+.footer-bottom a { color: var(--muted); }
+.auth-tabs { display: flex; gap: 4px; margin-bottom: 14px; }
+.auth-tabs button { min-height: 36px; padding: 0 16px; background: transparent; color: var(--muted); border: 1px solid var(--border-strong); }
+.auth-tabs button.on { background: var(--primary); color: var(--primary-fg); border-color: transparent; }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+.field-grid label { display: block; font-size: var(--text-sm); font-weight: 600; color: var(--fg); }
+.field-grid input { display: block; width: 100%; margin-top: 6px; }
+.hint { font-size: var(--text-sm); line-height: var(--leading-body); color: var(--muted); margin: 0 0 12px; }
+#adminStats p, #adminKc p { font-size: var(--text-sm); line-height: var(--leading-body); margin: 4px 0 12px; }
+#adminUsers table { margin-bottom: 12px; }
+@media (max-width: 720px) {
+  .footer-cols { grid-template-columns: 1fr; gap: 16px; }
+  .field-grid { grid-template-columns: 1fr; }
+  .site-nav { flex-wrap: wrap; }
+}
 </style>
 </head>
 <body>
-<header>
+<header id="top">
+  <nav class="site-nav" aria-label="站内导航">
+    <div class="nav-links">
+      <a href="#top">首页</a>
+      <a href="#stage1">功能</a>
+      <a href="#siteFooter">联系作者</a>
+    </div>
+    <div class="nav-right">
+      <span id="userChip" class="user-chip hidden"><span id="userEmail"></span><button id="logoutBtn" class="small ghost" type="button">退出</button></span>
+      <button id="authBtn" class="nav-login" type="button">登录</button>
+    </div>
+  </nav>
   <div class="head-row">
     <div class="head-text">
       
@@ -421,6 +465,67 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
   </div>
   <div class="work">
   <div class="progress" id="stepProgress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="完成进度"><i></i></div>
+
+  <!-- 登录（v1.6，本地范围）：账号只存在这台浏览器里，云同步即将上线。不登录也能用全部功能。 -->
+  <div class="card hidden" id="authCard">
+    <h2>登录 / 注册</h2>
+    <p class="hint">账号只存在这台浏览器里，云同步即将上线。登录后，这台电脑上的考试记录按账号分开存；不登录也能用全部功能。</p>
+    <div id="authForms">
+      <div class="auth-tabs">
+        <button id="authTabLogin" class="on" type="button">登录</button>
+        <button id="authTabRegister" type="button">注册</button>
+      </div>
+      <div class="field-grid">
+        <label>邮箱<input type="email" id="authEmail" autocomplete="username" placeholder="老师邮箱，如 teacher@school.cn"></label>
+        <label>密码<input type="password" id="authPassword" autocomplete="current-password" placeholder="至少 6 位"></label>
+      </div>
+      <div class="field-grid hidden" id="authConfirmRow">
+        <label>再输一次密码<input type="password" id="authPassword2" autocomplete="new-password" placeholder="和上面一致"></label>
+      </div>
+      <p class="hint">密码在浏览器里做 SHA-256 加盐哈希后才保存，不会以明文存下来，也不会发到任何服务器。</p>
+      <button id="authSubmit" type="button">登录</button>
+      <p class="muted" id="authMsg" role="status"></p>
+    </div>
+    <div id="authLoggedIn" class="hidden">
+      <p>已登录：<strong id="authCurrentEmail"></strong></p>
+      <div class="field-grid">
+        <label>旧密码<input type="password" id="authOldPw" autocomplete="current-password"></label>
+        <label>新密码<input type="password" id="authNewPw" autocomplete="new-password" placeholder="至少 6 位"></label>
+      </div>
+      <button id="authChangePwBtn" type="button">改密码</button>
+      <button id="authLogoutBtn" class="small ghost" type="button">退出登录</button>
+      <p class="muted" id="authChangeMsg" role="status"></p>
+    </div>
+  </div>
+
+  <!-- 管理员后台（v1.6，本地范围）：只管这台机器上的账号，云端管理等服务器上线后开放。 -->
+  <div class="card hidden" id="adminCard">
+    <h2>管理员后台</h2>
+    <p class="hint">只管这台机器上的老师账号。管理员默认看不到老师的学生数据；云端管理等服务器上线后开放。</p>
+    <div id="adminSetup">
+      <p>第一次使用：先设置一个管理员密码（至少 8 位）。<strong>没有默认密码</strong>，设好请记牢。</p>
+      <div class="field-grid">
+        <label>管理员密码<input type="password" id="adminSetPw" autocomplete="new-password" placeholder="至少 8 位"></label>
+        <label>再输一次<input type="password" id="adminSetPw2" autocomplete="new-password"></label>
+      </div>
+      <button id="adminSetBtn" type="button">设置管理员密码</button>
+      <p class="muted" id="adminSetMsg" role="status"></p>
+    </div>
+    <div id="adminLogin" class="hidden">
+      <div class="field-grid">
+        <label>管理员密码<input type="password" id="adminPw" autocomplete="current-password"></label>
+      </div>
+      <button id="adminLoginBtn" type="button">进入后台</button>
+      <p class="muted" id="adminLoginMsg" role="status"></p>
+    </div>
+    <div id="adminPanel" class="hidden">
+      <div id="adminStats"></div>
+      <div id="adminKc"></div>
+      <div id="adminUsers"></div>
+      <div id="adminResetOut" class="muted" role="status"></div>
+      <button id="adminLogoutBtn" class="small ghost" type="button">退出后台</button>
+    </div>
+  </div>
 
   <div class="card" id="stage1">
     <h2>第 1 步 · 上传成绩表</h2>
@@ -501,6 +606,27 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
   </div>
   </div>
 </main>
+<footer class="site-footer" id="siteFooter">
+  <div class="footer-cols">
+    <div class="footer-col">
+      <h3>关于我们</h3>
+      <p>轻量教师讲评工具：班级诊断 + 讲评提纲，数据默认不出老师电脑。</p>
+    </div>
+    <div class="footer-col">
+      <h3>联系作者</h3>
+      <p>邮箱：<a href="mailto:chiqiangli@snnu.edu.cn">chiqiangli@snnu.edu.cn</a></p>
+      <p>GitHub：<a href="https://github.com/lcq666666" target="_blank" rel="noopener">lcq666666</a></p>
+    </div>
+    <div class="footer-col" id="partnersCol">
+      <h3>合作伙伴</h3>
+      <ul id="partnersList"></ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 教师讲评助手</span>
+    <a href="#adminCard" id="adminEntryLink">管理员入口</a>
+  </div>
+</footer>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>
 /*! xlsx.js (C) 2013-present SheetJS -- http://sheetjs.com */
@@ -781,12 +907,16 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     { id: 1085, name: '列联表与独立性检验', module: '选择性必修第三册', chapter: '第八章 成对数据的统计分析', keywords: ['列联表', '独立性检验', '卡方检验', 'χ2检验'], desc: '列联表与独立性检验，判断两个分类变量是否有关联。' }
   ]);
 
+  // HS_BANK 版本号：后台页展示用；库内容变了就改这里的日期。
+  var HS_BANK_VERSION = '2026-11-14';
+
   globalThis.__kcTagger = {
     buildKCBank: buildKCBank,
     tagQuestion: tagQuestion,
     tagQuestions: tagQuestions,
     DEMO_BANK: DEMO_BANK,
-    HS_BANK: HS_BANK
+    HS_BANK: HS_BANK,
+    HS_BANK_VERSION: HS_BANK_VERSION
   };
 })();
 
@@ -1296,6 +1426,353 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
 </script>
 <script>
+// auth.js — 本地账号（老师）+ 管理员后台登录，全部存在这台浏览器本地。
+// 不联网、不设默认密码、不存明文密码：密码只存 SHA-256 加盐哈希。
+// 账号只存在这台浏览器里，云同步即将上线——登录是可选项，不登录也能用全部功能。
+// 纯 JS：不 import、不碰 DOM，Node 和浏览器都能直接用（Node 测试见 test_auth.js）。
+// 哈希首选 crypto.subtle（浏览器 https/file、Node webcrypto 都有）；subtle 不可用时
+// 走内置的标准 SHA-256（同步实现，单元测试对过 subtle 的结果，两边算出同一摘要，
+// 所以注册和登录走哪条路都能互相验证；每条记录存 alg 字段，说明当时走的哪条路）。
+(function () {
+  'use strict';
+
+  var USERS_KEY = 'examReviewUsers';
+  var SESSION_KEY = 'examReviewSession';
+  var ADMIN_KEY = 'examReviewAdmin';
+  var ADMIN_SESSION_KEY = 'examReviewAdminSession';
+  var MIN_PASSWORD = 6;
+  var MIN_ADMIN_PASSWORD = 8;
+
+  function store() {
+    try {
+      var w = (typeof globalThis !== 'undefined') ? globalThis : null;
+      return (w && w.localStorage) || null;
+    } catch (e) { return null; }
+  }
+  function read(key) {
+    var s = store();
+    if (!s) return null;
+    try {
+      var v = s.getItem(key);
+      return (v === null || v === '' || v === undefined) ? null : v;
+    } catch (e) { return null; }
+  }
+  function write(key, value) {
+    var s = store();
+    if (!s) return;
+    try { s.setItem(key, value); } catch (e) {}
+  }
+  function remove(key) {
+    var s = store();
+    if (!s) return;
+    try { if (s.removeItem) s.removeItem(key); else s.setItem(key, ''); } catch (e) {}
+  }
+  function readJson(key, fallback) {
+    var v = read(key);
+    if (!v) return fallback;
+    try {
+      var o = JSON.parse(v);
+      return (o && typeof o === 'object') ? o : fallback;
+    } catch (e) { return fallback; }
+  }
+  function writeJson(key, obj) { write(key, JSON.stringify(obj)); }
+
+  // ---- SHA-256 ----
+  function subtle() {
+    try {
+      var w = (typeof globalThis !== 'undefined') ? globalThis : null;
+      return (w && w.crypto && w.crypto.subtle) || null;
+    } catch (e) { return null; }
+  }
+  function utf8Bytes(str) {
+    var s = unescape(encodeURIComponent(str));
+    var b = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+    return b;
+  }
+  function hex(bytes) {
+    var out = '';
+    for (var i = 0; i < bytes.length; i++) {
+      var h = bytes[i].toString(16);
+      out += h.length === 1 ? '0' + h : h;
+    }
+    return out;
+  }
+  var K256 = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+  ];
+  function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
+  function sha256Sync(str) {
+    var bytes = utf8Bytes(str);
+    var bitLen = bytes.length * 8;
+    var paddedLen = (((bytes.length + 9 + 63) >> 6) << 6);
+    var m = new Uint8Array(paddedLen);
+    m.set(bytes);
+    m[bytes.length] = 0x80;
+    var dv = new DataView(m.buffer);
+    dv.setUint32(paddedLen - 8, Math.floor(bitLen / 0x100000000));
+    dv.setUint32(paddedLen - 4, bitLen >>> 0);
+    var h = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    var w = new Array(64);
+    for (var off = 0; off < paddedLen; off += 64) {
+      for (var i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4);
+      for (var t = 16; t < 64; t++) {
+        var s0 = rotr(w[t - 15], 7) ^ rotr(w[t - 15], 18) ^ (w[t - 15] >>> 3);
+        var s1 = rotr(w[t - 2], 17) ^ rotr(w[t - 2], 19) ^ (w[t - 2] >>> 10);
+        w[t] = (w[t - 16] + s0 + w[t - 7] + s1) | 0;
+      }
+      var a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], hh = h[7];
+      for (var t2 = 0; t2 < 64; t2++) {
+        var S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+        var ch = (e & f) ^ (~e & g);
+        var t1 = (hh + S1 + ch + K256[t2] + w[t2]) | 0;
+        var S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+        var maj = (a & b) ^ (a & c) ^ (b & c);
+        var t2v = (S0 + maj) | 0;
+        hh = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2v) | 0;
+      }
+      h[0] = (h[0] + a) | 0; h[1] = (h[1] + b) | 0; h[2] = (h[2] + c) | 0; h[3] = (h[3] + d) | 0;
+      h[4] = (h[4] + e) | 0; h[5] = (h[5] + f) | 0; h[6] = (h[6] + g) | 0; h[7] = (h[7] + hh) | 0;
+    }
+    var out = new Uint8Array(32);
+    var od = new DataView(out.buffer);
+    for (var i2 = 0; i2 < 8; i2++) od.setUint32(i2 * 4, h[i2] >>> 0);
+    return hex(out);
+  }
+  function hashPassword(password, salt) {
+    var sub = subtle();
+    if (sub) {
+      return sub.digest('SHA-256', utf8Bytes(salt + ':' + password)).then(function (buf) {
+        return { alg: 'subtle', hash: hex(new Uint8Array(buf)) };
+      });
+    }
+    return Promise.resolve({ alg: 'js', hash: sha256Sync(salt + ':' + password) });
+  }
+  function verifyPassword(password, cred) {
+    if (!cred || !cred.salt || !cred.hash) return Promise.resolve(false);
+    var sub = subtle();
+    if (sub) {
+      return sub.digest('SHA-256', utf8Bytes(cred.salt + ':' + password)).then(function (buf) {
+        return hex(new Uint8Array(buf)) === cred.hash;
+      });
+    }
+    return Promise.resolve(sha256Sync(cred.salt + ':' + password) === cred.hash);
+  }
+  function randomHex(nBytes) {
+    var bytes = new Uint8Array(nBytes);
+    try {
+      var w = (typeof globalThis !== 'undefined') ? globalThis : null;
+      if (w && w.crypto && w.crypto.getRandomValues) {
+        w.crypto.getRandomValues(bytes);
+        return hex(bytes);
+      }
+    } catch (e) {}
+    for (var i = 0; i < nBytes; i++) bytes[i] = Math.floor(Math.random() * 256);
+    return hex(bytes);
+  }
+  function randomTempPassword() {
+    var chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+    var out = '';
+    var bytes = new Uint8Array(10);
+    try {
+      var w = (typeof globalThis !== 'undefined') ? globalThis : null;
+      if (w && w.crypto && w.crypto.getRandomValues) w.crypto.getRandomValues(bytes);
+      else throw new Error('no crypto');
+    } catch (e) {
+      for (var i = 0; i < 10; i++) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    for (var j = 0; j < 10; j++) out += chars[bytes[j] % chars.length];
+    return out;
+  }
+
+  // ---- 老师账号 ----
+  function normEmail(email) { return String(email || '').trim().toLowerCase(); }
+  function validateEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normEmail(email));
+  }
+  function readUsers() { return readJson(USERS_KEY, {}); }
+  function register(email, password) {
+    email = normEmail(email);
+    if (!validateEmail(email)) return Promise.resolve({ ok: false, error: '邮箱格式不对，请检查。' });
+    if (typeof password !== 'string' || password.length < MIN_PASSWORD) return Promise.resolve({ ok: false, error: '密码至少 6 位。' });
+    var users = readUsers();
+    if (users[email]) return Promise.resolve({ ok: false, error: '这个邮箱已经注册过了，直接登录就行。' });
+    var salt = randomHex(16);
+    return hashPassword(password, salt).then(function (h) {
+      users[email] = { email: email, salt: salt, alg: h.alg, hash: h.hash, createdAt: Date.now(), disabled: false, mustChange: false };
+      writeJson(USERS_KEY, users);
+      return { ok: true };
+    });
+  }
+  function login(email, password) {
+    email = normEmail(email);
+    var users = readUsers();
+    var u = users[email];
+    if (!u) return Promise.resolve({ ok: false, error: '没找到这个邮箱，请先注册。' });
+    if (u.disabled) return Promise.resolve({ ok: false, error: '这个账号已被管理员停用，请联系管理员。' });
+    return verifyPassword(password, u).then(function (good) {
+      if (!good) return { ok: false, error: '密码不对，请再试一次。' };
+      writeJson(SESSION_KEY, { email: email, at: Date.now() });
+      return { ok: true, mustChange: !!u.mustChange };
+    });
+  }
+  function logout() { remove(SESSION_KEY); }
+  function currentUser() {
+    var sess = readJson(SESSION_KEY, null);
+    if (!sess || !sess.email) return null;
+    var u = readUsers()[normEmail(sess.email)];
+    if (!u || u.disabled) return null;
+    return u.email;
+  }
+  function changePassword(email, oldPassword, newPassword) {
+    email = normEmail(email);
+    if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD) return Promise.resolve({ ok: false, error: '新密码至少 6 位。' });
+    var users = readUsers();
+    var u = users[email];
+    if (!u) return Promise.resolve({ ok: false, error: '没找到这个邮箱。' });
+    return verifyPassword(oldPassword, u).then(function (good) {
+      if (!good) return { ok: false, error: '旧密码不对。' };
+      var salt = randomHex(16);
+      return hashPassword(newPassword, salt).then(function (h) {
+        u.salt = salt; u.alg = h.alg; u.hash = h.hash; u.mustChange = false;
+        writeJson(USERS_KEY, users);
+        return { ok: true };
+      });
+    });
+  }
+  function listUsers() {
+    var users = readUsers();
+    return Object.keys(users).sort(function (a, b) {
+      return (users[a].createdAt || 0) - (users[b].createdAt || 0);
+    }).map(function (email) {
+      var u = users[email];
+      return { email: u.email, createdAt: u.createdAt, disabled: !!u.disabled, mustChange: !!u.mustChange };
+    });
+  }
+  function setDisabled(email, disabled) {
+    email = normEmail(email);
+    var users = readUsers();
+    if (!users[email]) return false;
+    users[email].disabled = !!disabled;
+    writeJson(USERS_KEY, users);
+    return true;
+  }
+  function resetPassword(email) {
+    email = normEmail(email);
+    var users = readUsers();
+    if (!users[email]) return Promise.resolve(null);
+    var temp = randomTempPassword();
+    var salt = randomHex(16);
+    return hashPassword(temp, salt).then(function (h) {
+      users[email].salt = salt;
+      users[email].alg = h.alg;
+      users[email].hash = h.hash;
+      users[email].mustChange = true;
+      writeJson(USERS_KEY, users);
+      return temp;
+    });
+  }
+  // 上传记录按账号隔离：登录后记在自己的名下，退出后回到本机公共记录。
+  function uploadsKeyFor(email) {
+    return email ? 'examReviewUploads:' + email : 'examReviewUploads';
+  }
+
+  // ---- 管理员（本机） ----
+  function adminExists() { return !!readJson(ADMIN_KEY, null); }
+  function setAdminPassword(password) {
+    if (adminExists()) return Promise.resolve({ ok: false, error: '管理员密码已经设过了，不能重复设置。' });
+    if (typeof password !== 'string' || password.length < MIN_ADMIN_PASSWORD) return Promise.resolve({ ok: false, error: '管理员密码至少 8 位。' });
+    var salt = randomHex(16);
+    return hashPassword(password, salt).then(function (h) {
+      writeJson(ADMIN_KEY, { salt: salt, alg: h.alg, hash: h.hash, createdAt: Date.now() });
+      return { ok: true };
+    });
+  }
+  function adminLogin(password) {
+    var cred = readJson(ADMIN_KEY, null);
+    if (!cred) return Promise.resolve(false);
+    return verifyPassword(password, cred).then(function (good) {
+      if (!good) return false;
+      writeJson(ADMIN_SESSION_KEY, { at: Date.now() });
+      return true;
+    });
+  }
+  function adminLogout() { remove(ADMIN_SESSION_KEY); }
+  function adminLoggedIn() { return !!readJson(ADMIN_SESSION_KEY, null); }
+  function changeAdminPassword(oldPassword, newPassword) {
+    var cred = readJson(ADMIN_KEY, null);
+    if (!cred) return Promise.resolve({ ok: false, error: '还没设置管理员密码。' });
+    if (typeof newPassword !== 'string' || newPassword.length < MIN_ADMIN_PASSWORD) return Promise.resolve({ ok: false, error: '新密码至少 8 位。' });
+    return verifyPassword(oldPassword, cred).then(function (good) {
+      if (!good) return { ok: false, error: '旧密码不对。' };
+      var salt = randomHex(16);
+      return hashPassword(newPassword, salt).then(function (h) {
+        writeJson(ADMIN_KEY, { salt: salt, alg: h.alg, hash: h.hash, createdAt: cred.createdAt || Date.now() });
+        return { ok: true };
+      });
+    });
+  }
+  // 本地使用统计（只数数，不读学生姓名和成绩明细）：
+  // users 是 listUsers() 的结果，records 是各次考试的上传记录
+  // [{nQuestions, nRows, skills:[...]}]，由页面从 examReviewUploads* 里汇总。
+  function adminStats(users, records) {
+    var exams = (records || []).length;
+    var questions = 0, answers = 0;
+    var skillSet = {};
+    (records || []).forEach(function (r) {
+      questions += r.nQuestions || 0;
+      answers += r.nRows || 0;
+      (r.skills || []).forEach(function (s) { skillSet[s] = true; });
+    });
+    var active = (users || []).filter(function (u) { return !u.disabled; }).length;
+    return {
+      teachers: (users || []).length,
+      activeTeachers: active,
+      exams: exams,
+      questions: questions,
+      answers: answers,
+      skillsCovered: Object.keys(skillSet).length
+    };
+  }
+
+  var api = {
+    USERS_KEY: USERS_KEY,
+    SESSION_KEY: SESSION_KEY,
+    ADMIN_KEY: ADMIN_KEY,
+    MIN_PASSWORD: MIN_PASSWORD,
+    MIN_ADMIN_PASSWORD: MIN_ADMIN_PASSWORD,
+    validateEmail: validateEmail,
+    hashPassword: hashPassword,
+    register: register,
+    login: login,
+    logout: logout,
+    currentUser: currentUser,
+    changePassword: changePassword,
+    listUsers: listUsers,
+    setDisabled: setDisabled,
+    resetPassword: resetPassword,
+    uploadsKeyFor: uploadsKeyFor,
+    adminExists: adminExists,
+    setAdminPassword: setAdminPassword,
+    adminLogin: adminLogin,
+    adminLogout: adminLogout,
+    adminLoggedIn: adminLoggedIn,
+    changeAdminPassword: changeAdminPassword,
+    adminStats: adminStats,
+    _sha256Sync: sha256Sync
+  };
+  if (typeof globalThis !== 'undefined') globalThis.__auth = api;
+})();
+
+</script>
+<script>
 // __theme: light / dark / system switch, shared by v3 (segmented control)
 // and redpen (dropdown menu). Pure JS with its own Node test
 // (hidden_files/test_theme.js). No DOM is touched at load time when there
@@ -1495,6 +1972,7 @@ const MOCK_KC_CSV = `题号,题型,满分,知识点编号
 8,填空题,5,48
 9,选择题,5,92
 10,选择题,5,92`;
+const PARTNERS = [];
 const W = Array.from({length: NSKILL}, () => new Float64Array(NSKILL));
 MODEL.W.forEach(([a, b, w]) => { W[a][b] = w; });
 const PRIOR = MODEL.prior;
@@ -1543,11 +2021,19 @@ function logAudit(text) {
   document.getElementById('auditLog').innerHTML = audit.map(a => '<li>' + a + '</li>').join('');
 }
 // 上传记录（T-20）：每次载入成绩表记一条，存在浏览器本地；重新上传覆盖当前数据，旧记录保留。
+// 账号隔离（v1.6）：登录后记在自己的名下，退出后回到本机公共记录；未登录时和原来一样。
 let uploads = [];
+function uploadKey() {
+  try {
+    const a = window.__auth;
+    const email = a ? a.currentUser() : null;
+    return a ? a.uploadsKeyFor(email) : 'examReviewUploads';
+  } catch (e) { return 'examReviewUploads'; }
+}
 function loadUploads() {
   try {
     if (typeof localStorage === 'undefined') { uploads = []; return; }
-    uploads = JSON.parse(localStorage.getItem('examReviewUploads') || '[]');
+    uploads = JSON.parse(localStorage.getItem(uploadKey()) || '[]');
     if (!Array.isArray(uploads)) uploads = [];
   } catch (e) { uploads = []; }
 }
@@ -1562,8 +2048,33 @@ function recordUpload(label, nStudents, nQuestions, nRows) {
   loadUploads();
   uploads.push({ time: new Date().toLocaleString(), label, nStudents, nQuestions, nRows });
   uploads = uploads.slice(-10);
-  try { if (typeof localStorage !== 'undefined') localStorage.setItem('examReviewUploads', JSON.stringify(uploads)); } catch (e) {}
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem(uploadKey(), JSON.stringify(uploads)); } catch (e) {}
   renderUploads();
+}
+// 考试用了哪些知识点，补记到最近一条上传记录里（管理员后台的覆盖统计用）。
+function recordUploadSkills(skills) {
+  if (!uploads.length) return;
+  const last = uploads[uploads.length - 1];
+  const set = {};
+  (last.skills || []).forEach(s => { set[s] = true; });
+  (skills || []).forEach(s => { set[s] = true; });
+  last.skills = Object.keys(set).map(Number).sort((a, b) => a - b);
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem(uploadKey(), JSON.stringify(uploads)); } catch (e) {}
+}
+// 管理员后台的本地统计：汇总这台机器上所有账号的上传记录（只数数，不读内容）。
+function collectAllUploads() {
+  const out = [];
+  try {
+    if (typeof localStorage === 'undefined') return out;
+    const keys = [];
+    if (typeof localStorage.length === 'number' && typeof localStorage.key === 'function') {
+      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k) keys.push(k); }
+    } else if (localStorage._s) { Object.keys(localStorage._s).forEach(k => keys.push(k)); }
+    keys.filter(k => k === 'examReviewUploads' || k.indexOf('examReviewUploads:') === 0).forEach(k => {
+      try { const arr = JSON.parse(localStorage.getItem(k) || '[]'); if (Array.isArray(arr)) out.push(...arr); } catch (e) {}
+    });
+  } catch (e) {}
+  return out;
 }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 // 知识点编号合法范围：旧编号 1-123（ASSISTments 技能空间），
@@ -2332,6 +2843,7 @@ document.getElementById('toStage3').addEventListener('click', () => {
   st.byS.forEach(x => { html += `<tr><td>${skillLabel(x.s)}</td><td class="num">${x.n}</td><td class="num">${(x.acc * 100).toFixed(0)}%</td><td><div class="mini-bar"><i style="width:${Math.round(x.acc * 100)}%"></i></div></td></tr>`; });
   html += '</tbody></table>';
   document.getElementById('statsOut').innerHTML = html;
+  if (kcMap) recordUploadSkills([...new Set(Object.values(kcMap))]);
   show('stage3'); setStep(3);
   logAudit('确认试卷，进入统计');
 });
@@ -2501,6 +3013,199 @@ document.getElementById('copyBtn').addEventListener('click', () => {
   else document.execCommand('copy');
   toast('已复制到剪贴板');
 });
+// ---------- 登录 / 管理员后台 / 页脚（v1.6，本地范围） ----------
+// 合作伙伴从 partners.json 渲染：空数组时整个栏目隐藏，绝不编造名单。
+function renderFooterPartners() {
+  const col = document.getElementById('partnersCol');
+  const list = document.getElementById('partnersList');
+  if (!col || !list) return;
+  const ps = Array.isArray(PARTNERS) ? PARTNERS : [];
+  if (!ps.length) { col.style.display = 'none'; list.innerHTML = ''; return; }
+  col.style.display = '';
+  list.innerHTML = ps.map(p => {
+    const name = esc(p.name || '');
+    const url = p.url ? esc(String(p.url)) : '';
+    return url ? `<li><a href="${url}" target="_blank" rel="noopener">${name}</a></li>` : `<li>${name}</li>`;
+  }).join('');
+}
+// 登录状态决定页头显示什么：登录后显示老师邮箱 + 退出，没登录显示“登录”。
+let authMode = 'login';
+function refreshAuthUI() {
+  const a = window.__auth;
+  const email = a ? a.currentUser() : null;
+  const chip = document.getElementById('userChip');
+  const btn = document.getElementById('authBtn');
+  const emailEl = document.getElementById('userEmail');
+  if (email) {
+    if (chip) chip.classList.remove('hidden');
+    if (emailEl) emailEl.textContent = email;
+    if (btn) btn.classList.add('hidden');
+  } else {
+    if (chip) chip.classList.add('hidden');
+    if (btn) btn.classList.remove('hidden');
+  }
+  const forms = document.getElementById('authForms');
+  const logged = document.getElementById('authLoggedIn');
+  if (forms && logged) {
+    if (email) {
+      forms.classList.add('hidden');
+      logged.classList.remove('hidden');
+      const cur = document.getElementById('authCurrentEmail');
+      if (cur) cur.textContent = email;
+    } else {
+      forms.classList.remove('hidden');
+      logged.classList.add('hidden');
+    }
+  }
+}
+function setAuthMode(mode) {
+  authMode = mode;
+  const confirmRow = document.getElementById('authConfirmRow');
+  const submit = document.getElementById('authSubmit');
+  const loginTab = document.getElementById('authTabLogin');
+  const regTab = document.getElementById('authTabRegister');
+  if (confirmRow) confirmRow.classList.toggle('hidden', mode !== 'register');
+  if (submit) submit.textContent = mode === 'register' ? '注册' : '登录';
+  if (loginTab) loginTab.classList.toggle('on', mode === 'login');
+  if (regTab) regTab.classList.toggle('on', mode === 'register');
+}
+function openAuthCard() {
+  const card = document.getElementById('authCard');
+  if (card) { card.classList.remove('hidden'); if (card.scrollIntoView) card.scrollIntoView(); }
+}
+function doLogout() {
+  if (window.__auth) window.__auth.logout();
+  refreshAuthUI();
+  loadUploads(); renderUploads();
+  toast('已退出登录。');
+}
+document.getElementById('authBtn').addEventListener('click', openAuthCard);
+document.getElementById('authTabLogin').addEventListener('click', () => setAuthMode('login'));
+document.getElementById('authTabRegister').addEventListener('click', () => setAuthMode('register'));
+document.getElementById('authSubmit').addEventListener('click', async () => {
+  const msg = document.getElementById('authMsg');
+  const email = document.getElementById('authEmail').value;
+  const pw = document.getElementById('authPassword').value;
+  const pw2 = document.getElementById('authPassword2').value;
+  if (!window.__auth) { if (msg) msg.textContent = '登录模块没加载上，请刷新页面再试。'; return; }
+  let res;
+  if (authMode === 'register') {
+    if (pw !== pw2) { if (msg) msg.textContent = '两次输入的密码不一样。'; return; }
+    res = await window.__auth.register(email, pw);
+    if (!res.ok) { if (msg) msg.textContent = res.error; return; }
+    res = await window.__auth.login(email, pw);
+  } else {
+    res = await window.__auth.login(email, pw);
+  }
+  if (!res.ok) { if (msg) msg.textContent = res.error; return; }
+  if (msg) msg.textContent = '';
+  refreshAuthUI();
+  loadUploads(); renderUploads();
+  if (res.mustChange) toast('这是管理员重置的临时密码，请先在下面改密码。');
+  else toast('已登录为 ' + email);
+  logAudit('登录：' + email);
+});
+document.getElementById('logoutBtn').addEventListener('click', doLogout);
+document.getElementById('authLogoutBtn').addEventListener('click', doLogout);
+document.getElementById('authChangePwBtn').addEventListener('click', async () => {
+  const email = window.__auth && window.__auth.currentUser();
+  const msg = document.getElementById('authChangeMsg');
+  if (!email) { if (msg) msg.textContent = '请先登录。'; return; }
+  const oldPw = document.getElementById('authOldPw').value;
+  const newPw = document.getElementById('authNewPw').value;
+  const res = await window.__auth.changePassword(email, oldPw, newPw);
+  if (msg) msg.textContent = res.ok ? '密码已改好。' : res.error;
+  if (res.ok) { document.getElementById('authOldPw').value = ''; document.getElementById('authNewPw').value = ''; }
+});
+// 管理员后台：首次由用户本人设密码，没有默认密码；只管这台机器上的账号。
+function showAdminCard() {
+  const card = document.getElementById('adminCard');
+  if (card) { card.classList.remove('hidden'); if (card.scrollIntoView) card.scrollIntoView(); }
+  refreshAdminUI();
+}
+function refreshAdminUI() {
+  const a = window.__auth;
+  if (!a) return;
+  const setup = document.getElementById('adminSetup');
+  const login = document.getElementById('adminLogin');
+  const panel = document.getElementById('adminPanel');
+  if (!setup || !login || !panel) return;
+  if (!a.adminExists()) {
+    setup.classList.remove('hidden'); login.classList.add('hidden'); panel.classList.add('hidden');
+  } else if (a.adminLoggedIn()) {
+    setup.classList.add('hidden'); login.classList.add('hidden'); panel.classList.remove('hidden');
+    renderAdminPanel();
+  } else {
+    setup.classList.add('hidden'); login.classList.remove('hidden'); panel.classList.add('hidden');
+  }
+}
+function renderAdminPanel() {
+  const a = window.__auth;
+  const statsEl = document.getElementById('adminStats');
+  const usersEl = document.getElementById('adminUsers');
+  const kcEl = document.getElementById('adminKc');
+  const users = a.listUsers();
+  const stats = a.adminStats(users, collectAllUploads());
+  if (statsEl) statsEl.innerHTML = `<p>老师账号 ${stats.teachers} 个（在用 ${stats.activeTeachers} 个） · 本地考试 ${stats.exams} 次 · 题目 ${stats.questions} 道 · 作答 ${stats.answers} 条 · 知识点覆盖 ${stats.skillsCovered} 个</p>`;
+  if (kcEl) {
+    const t = window.__kcTagger;
+    const hs = (t && t.HS_BANK) || [];
+    const ver = (t && t.HS_BANK_VERSION) || '2026-11-14';
+    kcEl.innerHTML = `<p>高中数学 KC 库：${hs.length} 个知识点（1001–1085），${ver} 版。演示词库：${((t && t.DEMO_BANK) || []).length} 个知识点。</p>`;
+  }
+  if (usersEl) {
+    usersEl.innerHTML = users.length
+      ? `<table><caption>老师账号</caption><thead><tr><th scope="col">邮箱</th><th scope="col">注册时间</th><th scope="col">状态</th><th scope="col">操作</th></tr></thead><tbody>` +
+        users.map(u => `<tr><td>${esc(u.email)}</td><td>${esc(new Date(u.createdAt).toLocaleString())}</td><td>${u.disabled ? '已停用' : '正常'}${u.mustChange ? ' · 待改密码' : ''}</td><td><button class="small ${u.disabled ? 'ghost' : 'danger'}" data-admin-toggle="${esc(u.email)}">${u.disabled ? '启用' : '停用'}</button> <button class="small ghost" data-admin-reset="${esc(u.email)}">重置密码</button></td></tr>`).join('') +
+        '</tbody></table>'
+      : '<p class="muted">还没有老师注册。</p>';
+    usersEl.querySelectorAll('[data-admin-toggle]').forEach(b => b.addEventListener('click', () => {
+      const email = b.getAttribute('data-admin-toggle');
+      const u = a.listUsers().find(x => x.email === email);
+      if (!u) return;
+      a.setDisabled(email, !u.disabled);
+      logAudit(`管理员${u.disabled ? '启用' : '停用'}账号：${email}`);
+      renderAdminPanel();
+    }));
+    usersEl.querySelectorAll('[data-admin-reset]').forEach(b => b.addEventListener('click', async () => {
+      const email = b.getAttribute('data-admin-reset');
+      const temp = await a.resetPassword(email);
+      const out = document.getElementById('adminResetOut');
+      if (temp) {
+        if (out) out.textContent = '已重置 ' + email + ' 的密码，临时密码是 ' + temp + '（只显示这一次，请转告老师登录后马上改密码）。';
+        logAudit('管理员重置密码：' + email);
+      }
+      renderAdminPanel();
+    }));
+  }
+}
+document.getElementById('adminEntryLink').addEventListener('click', (e) => {
+  if (e && e.preventDefault) e.preventDefault();
+  showAdminCard();
+});
+document.getElementById('adminSetBtn').addEventListener('click', async () => {
+  const pw = document.getElementById('adminSetPw').value;
+  const pw2 = document.getElementById('adminSetPw2').value;
+  const msg = document.getElementById('adminSetMsg');
+  if (pw !== pw2) { if (msg) msg.textContent = '两次输入的密码不一样。'; return; }
+  const res = await window.__auth.setAdminPassword(pw);
+  if (msg) msg.textContent = res.ok ? '管理员密码已设置，请用它登录。' : res.error;
+  if (res.ok) refreshAdminUI();
+});
+document.getElementById('adminLoginBtn').addEventListener('click', async () => {
+  const pw = document.getElementById('adminPw').value;
+  const msg = document.getElementById('adminLoginMsg');
+  const ok = await window.__auth.adminLogin(pw);
+  if (msg) msg.textContent = ok ? '' : '密码不对，请再试一次。';
+  if (ok) { document.getElementById('adminPw').value = ''; refreshAdminUI(); }
+});
+document.getElementById('adminLogoutBtn').addEventListener('click', () => {
+  if (window.__auth) window.__auth.adminLogout();
+  refreshAdminUI();
+});
+renderFooterPartners();
+refreshAuthUI();
+setAuthMode('login');
 loadUploads();
 renderUploads();
 loadLLMSettings();
