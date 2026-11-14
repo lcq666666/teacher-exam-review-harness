@@ -391,13 +391,16 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     return keyword.length;
   }
 
-  // 校验知识点 id：必须是 1-123 的整数。
+  // 校验知识点 id：旧编号 1-123（ASSISTments 技能空间，诊断引擎用），
+  // 或高中库编号 1001-1999（教材语言，见 HS_BANK）。124-1000 不合法。
   function isValidId(id) {
-    return typeof id === 'number' && Number.isInteger(id) && id >= 1 && id <= 123;
+    return typeof id === 'number' && Number.isInteger(id) &&
+      ((id >= 1 && id <= 123) || (id >= 1001 && id <= 1999));
   }
 
   // 规范化一条 bank 条目，非法返回 null。
-  // 复制条目（不改原对象）、去掉空关键词和重复关键词。
+  // 复制条目（不改原对象）、去掉空关键词和重复关键词；module/chapter/desc
+  // 是高中库的层级信息（模块/章/一句话说明），有就原样保留。
   function normalizeEntry(entry) {
     if (!entry || typeof entry !== 'object') return null;
     if (!isValidId(entry.id)) return null;
@@ -414,11 +417,15 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       keywords.push(kw);
     }
     if (keywords.length === 0) return null;
-    return {
+    var out = {
       id: entry.id,
       name: typeof entry.name === 'string' ? entry.name : '',
       keywords: keywords
     };
+    if (typeof entry.module === 'string') out.module = entry.module;
+    if (typeof entry.chapter === 'string') out.chapter = entry.chapter;
+    if (typeof entry.desc === 'string') out.desc = entry.desc;
+    return out;
   }
 
   // buildKCBank(entries)：把原始条目数组规范化成 bank。
@@ -516,11 +523,113 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     }
   ]);
 
+  // HS_BANK：高中数学知识点库（教材/高考考点语言，人教A版 2019）。
+  // 主干是必修第一册/第二册 + 选择性必修第一/二/三册的章结构，
+  // 逐章对照 2024/2025 新高考一卷细目表核对过（见交付说明）。
+  // id 段 1001-1999，与旧 ASSISTments 编号 1-123 不重叠；
+  // 诊断引擎只有 123 个槽位，运行时由 build_v1.py 把新编号映射进空闲槽位。
+  // 关键词 3-8 个：优先用题干里原样出现的词（“求…的离心率”“用导数求单调区间”），
+  // 少用 bare 大词（“向量”“集合”“概率”只在不会撞车的地方保留），
+  // 同名概念靠更长的专有词区分（如“椭圆的离心率”对“双曲线的离心率”）。
+  var HS_BANK = buildKCBank([
+    // ---- 必修第一册 ----
+    { id: 1001, name: '集合的概念与表示', module: '必修第一册', chapter: '第一章 集合与常用逻辑用语', keywords: ['集合的概念', '元素', '列举法', '描述法', '属于', '集合的含义'], desc: '集合的含义、表示方法，元素与集合的关系。' },
+    { id: 1002, name: '集合间的基本关系', module: '必修第一册', chapter: '第一章 集合与常用逻辑用语', keywords: ['子集', '真子集', '集合相等', '空集', '包含', '⊆'], desc: '子集、真子集、空集，集合之间的包含关系。' },
+    { id: 1003, name: '集合的基本运算', module: '必修第一册', chapter: '第一章 集合与常用逻辑用语', keywords: ['交集', '并集', '补集', '韦恩图', '全集', '∩', '∪'], desc: '交集、并集、补集的运算，会用数轴和韦恩图。' },
+    { id: 1004, name: '充分条件与必要条件', module: '必修第一册', chapter: '第一章 集合与常用逻辑用语', keywords: ['充分条件', '必要条件', '充要条件', '充分不必要'], desc: '判断条件是充分、必要还是充要，常用集合的包含关系看。' },
+    { id: 1005, name: '全称量词与存在量词', module: '必修第一册', chapter: '第一章 集合与常用逻辑用语', keywords: ['全称量词', '存在量词', '全称量词命题', '存在量词命题', '命题的否定'], desc: '全称量词命题和存在量词命题，及其否定形式。' },
+    { id: 1006, name: '等式性质与不等式性质', module: '必修第一册', chapter: '第二章 一元二次函数、方程和不等式', keywords: ['等式性质', '不等式性质', '不等关系'], desc: '等式和不等式的基本性质，比较大小的依据。' },
+    { id: 1007, name: '基本不等式', module: '必修第一册', chapter: '第二章 一元二次函数、方程和不等式', keywords: ['基本不等式', '均值不等式', '一正二定三相等'], desc: '基本不等式求最值，一正、二定、三相等缺一不可。' },
+    { id: 1008, name: '二次函数与一元二次方程、不等式', module: '必修第一册', chapter: '第二章 一元二次函数、方程和不等式', keywords: ['一元二次不等式', '二次函数', '一元二次方程', '解集'], desc: '结合二次函数图象解一元二次不等式，三个“二次”的联系。' },
+    { id: 1009, name: '函数的概念及其表示', module: '必修第一册', chapter: '第三章 函数概念与性质', keywords: ['函数的概念', '定义域', '值域', '对应关系', '函数的表示法'], desc: '函数的三要素：定义域、对应关系、值域；三种表示法。' },
+    { id: 1010, name: '函数的单调性', module: '必修第一册', chapter: '第三章 函数概念与性质', keywords: ['函数单调性', '单调递增', '单调递减', '增函数', '减函数', '单调性', '单调区间'], desc: '单调递增、单调递减，单调区间，用定义或图象判断。' },
+    { id: 1011, name: '函数的奇偶性', module: '必修第一册', chapter: '第三章 函数概念与性质', keywords: ['奇函数', '偶函数', '函数的奇偶性', '图象关于原点对称', '图象关于y轴对称', '奇偶性'], desc: '奇函数、偶函数的定义与图象特征，先看定义域对称。' },
+    { id: 1012, name: '幂函数', module: '必修第一册', chapter: '第三章 函数概念与性质', keywords: ['幂函数', '幂函数的图象', '幂函数的性质'], desc: '常见幂函数的图象与性质，指数决定图象形状。' },
+    { id: 1013, name: '函数的应用：零点与函数模型', module: '必修第一册', chapter: '第三章 函数概念与性质', keywords: ['函数的零点', '方程的解', '二分法', '函数模型'], desc: '函数零点与方程解的关系，二分法求近似解，函数模型应用。' },
+    { id: 1014, name: '指数与指数幂运算', module: '必修第一册', chapter: '第四章 指数函数与对数函数', keywords: ['指数幂', '分数指数幂', '根式', '指数运算'], desc: '根式与分数指数幂的互化，指数幂的运算性质。' },
+    { id: 1015, name: '指数函数及其性质', module: '必修第一册', chapter: '第四章 指数函数与对数函数', keywords: ['指数函数', '指数函数的图象', '指数函数的性质'], desc: '指数函数的图象与性质，底数决定增减。' },
+    { id: 1016, name: '对数与对数运算', module: '必修第一册', chapter: '第四章 指数函数与对数函数', keywords: ['对数', '对数的运算', '换底公式', '对数恒等式'], desc: '对数的概念与运算性质，换底公式，指对互化。' },
+    { id: 1017, name: '对数函数及其性质', module: '必修第一册', chapter: '第四章 指数函数与对数函数', keywords: ['对数函数', '对数函数的图象', '对数函数的性质'], desc: '对数函数的图象与性质，与指数函数互为反函数。' },
+    { id: 1018, name: '不同函数增长的差异', module: '必修第一册', chapter: '第四章 指数函数与对数函数', keywords: ['函数增长', '指数增长', '对数增长', '增长差异', '函数的增长'], desc: '指数、对数、幂函数增长快慢的比较。' },
+    { id: 1019, name: '任意角和弧度制', module: '必修第一册', chapter: '第五章 三角函数', keywords: ['任意角', '弧度制', '弧长公式', '扇形面积'], desc: '任意角的概念，弧度制，弧长与扇形面积公式。' },
+    { id: 1020, name: '三角函数的概念', module: '必修第一册', chapter: '第五章 三角函数', keywords: ['三角函数', '正弦', '余弦', '正切', '三角函数值', '同角三角函数'], desc: '任意角的正弦、余弦、正切，同角三角函数的基本关系。' },
+    { id: 1021, name: '诱导公式', module: '必修第一册', chapter: '第五章 三角函数', keywords: ['诱导公式', '奇变偶不变', '符号看象限'], desc: '诱导公式化简求值，口诀是“奇变偶不变，符号看象限”。' },
+    { id: 1022, name: '三角函数的图象与性质', module: '必修第一册', chapter: '第五章 三角函数', keywords: ['正弦函数', '余弦函数', '正切函数', '三角函数的图象', '正弦函数的性质', '余弦函数的性质'], desc: '正弦、余弦、正切函数的图象与性质：周期、最值、单调区间。' },
+    { id: 1023, name: '三角恒等变换', module: '必修第一册', chapter: '第五章 三角函数', keywords: ['两角和与差', '两角和', '两角差', '二倍角', '三角恒等变换', '辅助角公式'], desc: '两角和与差、二倍角公式，辅助角公式，恒等变换化简求值。' },
+    { id: 1024, name: '函数 y=Asin(ωx+φ)', module: '必修第一册', chapter: '第五章 三角函数', keywords: ['函数y=Asin', 'Asin(ωx+φ)', '振幅', '周期', '相位', '初相'], desc: 'y=Asin(ωx+φ) 的图象与性质：振幅、周期、相位、初相。' },
+    { id: 1025, name: '三角函数的应用', module: '必修第一册', chapter: '第五章 三角函数', keywords: ['三角函数的应用', '简谐运动', '匀速圆周运动'], desc: '三角函数模型解决实际问题，如简谐运动、圆周运动。' },
+    // ---- 必修第二册 ----
+    { id: 1026, name: '平面向量的概念', module: '必修第二册', chapter: '第六章 平面向量及其应用', keywords: ['向量的模', '相等向量', '共线向量', '零向量', '共线'], desc: '向量的概念、表示与模，相等向量、共线向量、零向量。' },
+    { id: 1027, name: '平面向量的线性运算', module: '必修第二册', chapter: '第六章 平面向量及其应用', keywords: ['向量的加法', '向量的减法', '向量的数乘', '向量共线定理', '向量的线性运算'], desc: '向量的加、减、数乘运算，三角形法则与平行四边形法则。' },
+    { id: 1028, name: '平面向量的数量积', module: '必修第二册', chapter: '第六章 平面向量及其应用', keywords: ['向量的数量积', '数量积', '向量夹角', '向量垂直', '⊥'], desc: '数量积的定义与运算律，夹角、垂直的判定。' },
+    { id: 1029, name: '平面向量基本定理及坐标表示', module: '必修第二册', chapter: '第六章 平面向量及其应用', keywords: ['平面向量基本定理', '向量坐标', '坐标表示', '向量坐标运算'], desc: '平面向量基本定理，向量的坐标表示与坐标运算。' },
+    { id: 1030, name: '平面向量的应用', module: '必修第二册', chapter: '第六章 平面向量及其应用', keywords: ['向量在几何中的应用', '向量在物理中的应用', '平面几何中的向量方法'], desc: '用向量方法解决平面几何与物理问题。' },
+    { id: 1031, name: '余弦定理', module: '必修第二册', chapter: '第六章 平面向量及其应用', keywords: ['余弦定理', '余弦定理的推论', '边角互化'], desc: '余弦定理及其推论，已知三边或两边一角求角求边。' },
+    { id: 1032, name: '正弦定理', module: '必修第二册', chapter: '第六章 平面向量及其应用', keywords: ['正弦定理', '正弦定理的推论', '边角互化'], desc: '正弦定理，已知两角一边或两边一对角求边求角。' },
+    { id: 1033, name: '解三角形的应用', module: '必修第二册', chapter: '第六章 平面向量及其应用', keywords: ['解三角形', '三角形面积公式', '测量问题', '内角', '对边'], desc: '正余弦定理综合解三角形，面积公式与实际测量问题。' },
+    { id: 1034, name: '复数的概念', module: '必修第二册', chapter: '第七章 复数', keywords: ['复数', '虚数单位', '复数的几何意义', '共轭复数', '复数的模', '1+i'], desc: '复数的概念、几何意义，共轭复数与复数的模。' },
+    { id: 1035, name: '复数的四则运算', module: '必修第二册', chapter: '第七章 复数', keywords: ['复数的加减', '复数的乘除', '复数运算', '复数的除法'], desc: '复数的加、减、乘、除运算，除法先分母实数化。' },
+    { id: 1036, name: '复数的三角表示', module: '必修第二册', chapter: '第七章 复数', keywords: ['复数的三角表示', '辐角', '棣莫弗定理'], desc: '复数的三角表示式，乘除运算的三角表示（选学）。' },
+    { id: 1037, name: '基本立体图形', module: '必修第二册', chapter: '第八章 立体几何初步', keywords: ['棱柱', '棱锥', '棱台', '圆柱', '圆锥', '圆台', '球', '简单组合体'], desc: '棱柱、棱锥、棱台与圆柱、圆锥、圆台、球的结构特征。' },
+    { id: 1038, name: '立体图形的直观图', module: '必修第二册', chapter: '第八章 立体几何初步', keywords: ['直观图', '斜二测画法', '三视图'], desc: '斜二测画法画直观图，读三视图还原几何体。' },
+    { id: 1039, name: '简单几何体的表面积与体积', module: '必修第二册', chapter: '第八章 立体几何初步', keywords: ['表面积', '体积', '球的体积', '侧面积', '圆柱', '圆锥', '底面半径'], desc: '柱、锥、台、球的表面积与体积公式。' },
+    { id: 1040, name: '空间点、直线、平面之间的位置关系', module: '必修第二册', chapter: '第八章 立体几何初步', keywords: ['空间点', '直线与平面', '平面与平面', '异面直线', '公理'], desc: '空间点、线、面的位置关系，四个公理与异面直线。' },
+    { id: 1041, name: '空间直线、平面的平行', module: '必修第二册', chapter: '第八章 立体几何初步', keywords: ['直线与平面平行', '平面与平面平行', '线面平行', '面面平行'], desc: '线面平行、面面平行的判定与性质。' },
+    { id: 1042, name: '空间直线、平面的垂直', module: '必修第二册', chapter: '第八章 立体几何初步', keywords: ['直线与平面垂直', '平面与平面垂直', '线面垂直', '面面垂直', '二面角'], desc: '线面垂直、面面垂直的判定与性质，二面角。' },
+    { id: 1043, name: '随机抽样', module: '必修第二册', chapter: '第九章 统计', keywords: ['简单随机抽样', '分层随机抽样', '随机抽样', '样本'], desc: '简单随机抽样与分层随机抽样，获取数据的途径。' },
+    { id: 1044, name: '用样本估计总体', module: '必修第二册', chapter: '第九章 统计', keywords: ['频率分布直方图', '总体取值规律', '百分位数', '平均数', '中位数', '众数', '方差', '标准差'], desc: '频率分布直方图，百分位数，平均数、中位数、众数、方差与标准差。' },
+    { id: 1045, name: '随机事件与概率', module: '必修第二册', chapter: '第十章 概率', keywords: ['随机事件', '古典概型', '概率的基本性质', '事件的关系和运算', '概率'], desc: '随机事件、古典概型，概率的基本性质。' },
+    { id: 1046, name: '事件的相互独立性', module: '必修第二册', chapter: '第十章 概率', keywords: ['相互独立事件', '独立事件', '相互独立'], desc: '相互独立事件的定义与概率乘法公式。' },
+    { id: 1047, name: '频率与概率', module: '必修第二册', chapter: '第十章 概率', keywords: ['频率', '概率的稳定性', '随机模拟'], desc: '频率的稳定性，随机模拟估计概率。' },
+    // ---- 选择性必修第一册 ----
+    { id: 1048, name: '空间向量及其运算', module: '选择性必修第一册', chapter: '第一章 空间向量与立体几何', keywords: ['空间向量', '空间向量的数量积', '空间向量运算'], desc: '空间向量的概念与运算，数量积。' },
+    { id: 1049, name: '空间向量基本定理', module: '选择性必修第一册', chapter: '第一章 空间向量与立体几何', keywords: ['空间向量基本定理', '空间向量分解', '共面定理'], desc: '空间向量基本定理，向量的分解与共面。' },
+    { id: 1050, name: '空间向量运算的坐标表示', module: '选择性必修第一册', chapter: '第一章 空间向量与立体几何', keywords: ['空间直角坐标系', '空间向量坐标', '空间向量坐标运算'], desc: '空间直角坐标系，空间向量运算的坐标表示。' },
+    { id: 1051, name: '用空间向量研究直线、平面的位置关系', module: '选择性必修第一册', chapter: '第一章 空间向量与立体几何', keywords: ['空间向量研究直线', '直线的方向向量', '平面的法向量', '线面平行向量', '线面垂直向量', '方向向量', '法向量'], desc: '方向向量与法向量，用空间向量判定线面平行与垂直。' },
+    { id: 1052, name: '用空间向量研究距离、夹角问题', module: '选择性必修第一册', chapter: '第一章 空间向量与立体几何', keywords: ['空间距离', '异面直线所成的角', '直线与平面所成的角', '二面角的向量求法', '点到平面的距离', '用空间向量'], desc: '用空间向量求距离与夹角：异面直线所成的角、线面角、二面角。' },
+    { id: 1053, name: '直线的倾斜角与斜率', module: '选择性必修第一册', chapter: '第二章 直线和圆的方程', keywords: ['直线的倾斜角', '斜率', '两条直线平行', '两条直线垂直', '倾斜角'], desc: '直线的倾斜角与斜率，两条直线平行与垂直的判定。' },
+    { id: 1054, name: '直线的方程', module: '选择性必修第一册', chapter: '第二章 直线和圆的方程', keywords: ['直线的方程', '点斜式方程', '斜截式方程', '两点式方程', '一般式方程', '直线方程'], desc: '直线的点斜式、斜截式、两点式、一般式方程。' },
+    { id: 1055, name: '直线的交点坐标与距离公式', module: '选择性必修第一册', chapter: '第二章 直线和圆的方程', keywords: ['两条直线的交点', '两点间的距离公式', '点到直线的距离公式', '两条平行直线间的距离', '交点坐标'], desc: '两条直线的交点坐标，两点间、点到直线、平行线间的距离。' },
+    { id: 1056, name: '圆的方程', module: '选择性必修第一册', chapter: '第二章 直线和圆的方程', keywords: ['圆的标准方程', '圆的一般方程', '圆心', '半径'], desc: '圆的标准方程与一般方程，圆心与半径。' },
+    { id: 1057, name: '直线与圆的位置关系', module: '选择性必修第一册', chapter: '第二章 直线和圆的方程', keywords: ['直线与圆的位置关系', '直线与圆相交', '直线与圆相切', '弦长'], desc: '直线与圆相交、相切、相离，弦长公式。' },
+    { id: 1058, name: '圆与圆的位置关系', module: '选择性必修第一册', chapter: '第二章 直线和圆的方程', keywords: ['圆与圆的位置关系', '两圆相交', '两圆相切', '外离', '内含', '两圆'], desc: '两圆外离、外切、相交、内切、内含，圆心距与半径的关系。' },
+    { id: 1059, name: '椭圆及其标准方程', module: '选择性必修第一册', chapter: '第三章 圆锥曲线的方程', keywords: ['椭圆', '椭圆的标准方程', '椭圆的焦点', '长轴', '短轴'], desc: '椭圆的定义与标准方程，长轴、短轴与焦点。' },
+    { id: 1060, name: '椭圆的简单几何性质', module: '选择性必修第一册', chapter: '第三章 圆锥曲线的方程', keywords: ['椭圆的几何性质', '离心率', '椭圆的范围', '椭圆的对称性', '椭圆'], desc: '椭圆的范围、对称性、离心率，离心率决定扁平程度。' },
+    { id: 1061, name: '双曲线及其标准方程', module: '选择性必修第一册', chapter: '第三章 圆锥曲线的方程', keywords: ['双曲线', '双曲线的标准方程', '双曲线的焦点', '实轴', '虚轴'], desc: '双曲线的定义与标准方程，实轴、虚轴与焦点。' },
+    { id: 1062, name: '双曲线的简单几何性质', module: '选择性必修第一册', chapter: '第三章 圆锥曲线的方程', keywords: ['双曲线的几何性质', '渐近线', '双曲线的离心率', '离心率', '双曲线'], desc: '双曲线的范围、对称性、渐近线与离心率。' },
+    { id: 1063, name: '抛物线及其标准方程', module: '选择性必修第一册', chapter: '第三章 圆锥曲线的方程', keywords: ['抛物线', '抛物线的标准方程', '抛物线的焦点', '准线'], desc: '抛物线的定义与标准方程，焦点与准线。' },
+    { id: 1064, name: '抛物线的简单几何性质', module: '选择性必修第一册', chapter: '第三章 圆锥曲线的方程', keywords: ['抛物线的几何性质', '抛物线的范围', '抛物线的对称性', '抛物线', '顶点'], desc: '抛物线的范围、对称性与顶点，离心率恒为 1。' },
+    { id: 1065, name: '直线与圆锥曲线的位置关系', module: '选择性必修第一册', chapter: '第三章 圆锥曲线的方程', keywords: ['直线与椭圆', '直线与双曲线', '直线与抛物线', '直线与圆锥曲线', '弦长公式', '韦达定理'], desc: '直线与圆锥曲线相交、相切，弦长公式与韦达定理设而不求。' },
+    // ---- 选择性必修第二册 ----
+    { id: 1066, name: '数列的概念', module: '选择性必修第二册', chapter: '第四章 数列', keywords: ['数列的概念', '数列的通项公式', '递推公式', '斐波那契数列', '数列的表示'], desc: '数列的概念、表示方法，通项公式与递推公式。' },
+    { id: 1067, name: '等差数列的概念', module: '选择性必修第二册', chapter: '第四章 数列', keywords: ['等差数列', '等差数列的通项公式', '等差中项', '公差'], desc: '等差数列的定义与通项公式，公差与等差中项。' },
+    { id: 1068, name: '等差数列的前 n 项和', module: '选择性必修第二册', chapter: '第四章 数列', keywords: ['等差数列的前n项和', '等差数列的前 n 项和', '前n项和', '前 n 项和', '等差数列求和', '裂项相消'], desc: '等差数列前 n 项和公式，裂项相消等求和方法。' },
+    { id: 1069, name: '等比数列的概念', module: '选择性必修第二册', chapter: '第四章 数列', keywords: ['等比数列', '等比数列的通项公式', '等比中项', '公比'], desc: '等比数列的定义与通项公式，公比与等比中项。' },
+    { id: 1070, name: '等比数列的前 n 项和', module: '选择性必修第二册', chapter: '第四章 数列', keywords: ['等比数列的前n项和', '等比数列的前 n 项和', '前n项和', '前 n 项和', '等比数列求和', '错位相减法'], desc: '等比数列前 n 项和公式，错位相减法求和。' },
+    { id: 1071, name: '数学归纳法', module: '选择性必修第二册', chapter: '第四章 数列', keywords: ['数学归纳法', '归纳假设', '递推证明'], desc: '数学归纳法的两个步骤：奠基与递推（选学）。' },
+    { id: 1072, name: '导数的概念及其意义', module: '选择性必修第二册', chapter: '第五章 一元函数的导数及其应用', keywords: ['导数的概念', '变化率', '导数的几何意义', '切线方程', '切线的斜率', '切线'], desc: '导数的概念，变化率，导数的几何意义就是切线的斜率。' },
+    { id: 1073, name: '导数的运算', module: '选择性必修第二册', chapter: '第五章 一元函数的导数及其应用', keywords: ['导数的运算', '基本初等函数的导数', '导数的四则运算法则', '复合函数的导数', '求导', '导数'], desc: '基本初等函数的导数，四则运算法则，复合函数求导。' },
+    { id: 1074, name: '导数在研究函数中的应用', module: '选择性必修第二册', chapter: '第五章 一元函数的导数及其应用', keywords: ['函数的单调性', '极值', '极小值', '极大值', '最值', '导数与函数的单调性', '单调区间', '导数'], desc: '用导数判断单调性、求极值与最值，导数是研究函数单调性的工具。' },
+    // ---- 选择性必修第三册 ----
+    { id: 1075, name: '分类加法计数原理与分步乘法计数原理', module: '选择性必修第三册', chapter: '第六章 计数原理', keywords: ['分类加法计数原理', '分步乘法计数原理', '计数原理'], desc: '分类用加法，分步用乘法，先分清是分类还是分步。' },
+    { id: 1076, name: '排列与组合', module: '选择性必修第三册', chapter: '第六章 计数原理', keywords: ['排列', '组合', '排列数', '组合数', '排成一排'], desc: '排列与组合，排列数与组合数公式，先选后排。' },
+    { id: 1077, name: '二项式定理', module: '选择性必修第三册', chapter: '第六章 计数原理', keywords: ['二项式定理', '二项式系数', '杨辉三角', '二项展开式'], desc: '二项式定理，二项式系数的性质与杨辉三角。' },
+    { id: 1078, name: '条件概率与全概率公式', module: '选择性必修第三册', chapter: '第七章 随机变量及其分布', keywords: ['条件概率', '全概率公式', '条件概率公式'], desc: '条件概率的定义与全概率公式。' },
+    { id: 1079, name: '离散型随机变量及其分布列', module: '选择性必修第三册', chapter: '第七章 随机变量及其分布', keywords: ['离散型随机变量', '分布列', '随机变量'], desc: '离散型随机变量及其分布列，分布列的两条性质。' },
+    { id: 1080, name: '离散型随机变量的数字特征', module: '选择性必修第三册', chapter: '第七章 随机变量及其分布', keywords: ['均值', '方差', '期望', '数学期望', '离散型随机变量的均值', '随机变量'], desc: '随机变量的均值（期望）与方差，均值反映集中位置。' },
+    { id: 1081, name: '二项分布与超几何分布', module: '选择性必修第三册', chapter: '第七章 随机变量及其分布', keywords: ['二项分布', '超几何分布', '独立重复试验'], desc: '二项分布与超几何分布：放回是二项，不放回是超几何。' },
+    { id: 1082, name: '正态分布', module: '选择性必修第三册', chapter: '第七章 随机变量及其分布', keywords: ['正态分布', '正态曲线', '3σ原则', '服从正态分布'], desc: '正态分布与正态曲线，3σ 原则。' },
+    { id: 1083, name: '成对数据的相关关系', module: '选择性必修第三册', chapter: '第八章 成对数据的统计分析', keywords: ['成对数据', '样本相关系数', '散点图', '正相关', '负相关'], desc: '散点图看相关关系，样本相关系数度量相关强弱。' },
+    { id: 1084, name: '一元线性回归模型及其应用', module: '选择性必修第三册', chapter: '第八章 成对数据的统计分析', keywords: ['一元线性回归模型', '回归方程', '线性回归', '残差', '决定系数'], desc: '一元线性回归模型，求回归方程，残差分析看拟合好坏。' },
+    { id: 1085, name: '列联表与独立性检验', module: '选择性必修第三册', chapter: '第八章 成对数据的统计分析', keywords: ['列联表', '独立性检验', '卡方检验', 'χ2检验'], desc: '列联表与独立性检验，判断两个分类变量是否有关联。' }
+  ]);
+
   globalThis.__kcTagger = {
     buildKCBank: buildKCBank,
     tagQuestion: tagQuestion,
     tagQuestions: tagQuestions,
-    DEMO_BANK: DEMO_BANK
+    DEMO_BANK: DEMO_BANK,
+    HS_BANK: HS_BANK
   };
 })();
 
@@ -547,9 +656,11 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   var DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
   var DEFAULT_MODEL = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
 
-  // 校验知识点 id：必须是 1-123 的整数（与诊断引擎的技能空间一致）。
+  // 校验知识点 id：旧编号 1-123（ASSISTments 技能空间），
+  // 或高中库编号 1001-1999（教材语言）。与 kc_tagger.js 的口径一致。
   function isValidId(id) {
-    return typeof id === 'number' && Number.isInteger(id) && id >= 1 && id <= 123;
+    return typeof id === 'number' && Number.isInteger(id) &&
+      ((id >= 1 && id <= 123) || (id >= 1001 && id <= 1999));
   }
 
   // buildPrompt(questions, bank)：把题干 + 知识点库拼成一段中文提示词。
@@ -767,11 +878,12 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   function renderItem(item) {
     var kind = item && item.kind;
     var skill = item && item.skill;
+    var skillName = item && typeof item.skillName === 'string' ? item.skillName : '';
     var topQ = item && item.topQ !== null && item.topQ !== undefined && item.topQ !== ''
       ? item.topQ
       : '本次考试未直接考到';
     var parts = [];
-    parts.push('<h3>' + escapeHtml(skill) + ' 号知识点</h3>');
+    parts.push('<h3>' + escapeHtml(skill) + ' 号' + (skillName ? ' · ' + escapeHtml(skillName) : '') + '知识点</h3>');
     parts.push('<p>掌握度：' + escapeHtml(formatMastery(item && item.mastery)) + '</p>');
     parts.push('<p>班级得分率：' + escapeHtml(formatAcc(item && item.acc)) + '</p>');
     parts.push('<p>错题示例：' + escapeHtml(topQ) + '</p>');
@@ -963,6 +1075,37 @@ function recordUpload(label, nStudents, nQuestions, nRows) {
   renderUploads();
 }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+// 知识点编号合法范围：旧编号 1-123（ASSISTments 技能空间），
+// 或高中库编号 1001-1999（教材语言）。与 kc_tagger.js 的口径一致。
+function isValidSkillId(v) { return Number.isInteger(v) && ((v >= 1 && v <= 123) || (v >= 1001 && v <= 1999)); }
+// 本次运行里高中库编号占的引擎槽位：{slot: {id, name}}，由 normalizeToLong 填。
+// 诊断引擎只有 123 个槽位，旧编号直接占位（编号-1），高中库编号按首次出现
+// 顺序占空闲槽位；显示时再由 skillLabel 把槽位翻回知识点编号和名称。
+let slotKC = {};
+// 按编号找知识点名：先高中库，再演示库（旧编号）。
+function kcNameById(id) {
+  try {
+    const t = window.__kcTagger;
+    if (t) {
+      const hs = t.HS_BANK && t.HS_BANK.find(x => x.id === id);
+      if (hs) return hs.name || '';
+      const d = t.DEMO_BANK && t.DEMO_BANK.find(x => x.id === id);
+      if (d) return d.name || '';
+    }
+  } catch (err) {}
+  return '';
+}
+// 诊断/统计表里显示知识点：高中库显示“1001 号 · 名称”，旧编号保持“92 号 · 名称”。
+function skillLabel(s) {
+  const kc = slotKC[s];
+  if (kc) return kc.id + ' 号 · ' + kc.name;
+  return (s + 1) + ' 号' + skillName(s);
+}
+// 提纲/导出里的短写法：旧编号保持“N 号”不变，高中库带上名称。
+function skillShort(s) {
+  const kc = slotKC[s];
+  return kc ? kc.id + ' 号 · ' + kc.name : (s + 1) + ' 号';
+}
 // 演示词库里有的知识点显示中文名（如 92 号 · 一次函数应用），没有的只显示编号。
 function skillName(s) {
   try {
@@ -989,14 +1132,18 @@ function applyTagged(tagged, bank, source) {
   });
   return { low, filled };
 }
-// LLM 用的知识点库：演示词库 + 已上传对应表里的知识点（名称能显示的显示）。
+// LLM 用的知识点库：高中库（85 个，教材语言）+ 演示词库（旧编号，
+// 老师拿初中卷来也能标）+ 已上传对应表里的知识点（名称能显示的显示）。
 function buildLLMBank() {
   const bank = [];
   const seen = {};
-  const demo = (window.__kcTagger && window.__kcTagger.DEMO_BANK) || [];
-  demo.forEach(e => { bank.push({ id: e.id, name: e.name }); seen[e.id] = true; });
+  const t = window.__kcTagger;
+  const hs = (t && t.HS_BANK) || [];
+  hs.forEach(e => { bank.push({ id: e.id, name: e.name }); seen[e.id] = true; });
+  const demo = (t && t.DEMO_BANK) || [];
+  demo.forEach(e => { if (!seen[e.id]) { bank.push({ id: e.id, name: e.name }); seen[e.id] = true; } });
   if (kcMap) Object.values(kcMap).forEach(id => {
-    if (!seen[id]) { bank.push({ id, name: (skillName(id - 1) || '').replace(/^ · /, '') }); seen[id] = true; }
+    if (!seen[id]) { bank.push({ id, name: kcNameById(id) }); seen[id] = true; }
   });
   return bank.sort((a, b) => a.id - b.id);
 }
@@ -1026,7 +1173,8 @@ function readLLMSettingsFromForm() {
 }
 function runKeywordTag(qs) {
   if (!window.__kcTagger) { document.getElementById('kcMsg').innerHTML = '标注模块没加载上，请刷新页面再试。'; return null; }
-  const bank = window.__kcTagger.buildKCBank(window.__kcTagger.DEMO_BANK);
+  // 关键词标注默认用高中库（教材语言）；演示词库只留给演示数据和 LLM 的库。
+  const bank = window.__kcTagger.buildKCBank(window.__kcTagger.HS_BANK || window.__kcTagger.DEMO_BANK);
   const tagged = window.__kcTagger.tagQuestions(qs, bank);
   const res = applyTagged(tagged, bank, '关键词');
   document.getElementById('kcMsg').innerHTML = `自动标注完成：${res.filled} 道题已预填知识点，${res.low} 道置信度低或没标上，请逐题确认后再点“用这份对应关系”。`;
@@ -1152,7 +1300,7 @@ function parseKCMap(text) {
   for (const row of grid) {
     if (/题号/.test(row[0])) continue;
     const qid = +row[0], skill = +row[3];
-    if (!qid || !skill || skill < 1 || skill > NSKILL) { issues.push(`跳过一行对应关系：${row.join(',')}`); continue; }
+    if (!qid || !isValidSkillId(skill)) { issues.push(`跳过一行对应关系：${row.join(',')}`); continue; }
     map[qid] = skill;
   }
   return { map, issues };
@@ -1169,18 +1317,41 @@ function splitQuestions(text) {
   return qs;
 }
 function normalizeToLong(gradebook, kcMap) {
-  const rows = []; let skippedNoKC = 0, skippedBlank = 0;
+  const rows = []; let skippedNoKC = 0, skippedBlank = 0, skippedNoSlot = 0;
+  // 槽位映射：引擎只有 123 个槽位。旧编号 1-123 直接占位（编号-1），演示数据
+  // 不受影响；高中库编号 1001+ 按首次出现顺序占空闲槽位（跳过旧编号占的位），
+  // 映射关系存在 slotMap 里，显示时由 skillLabel 翻回编号和名称。
+  // 一张卷子考的知识点数远少于 123 个，槽位耗尽在实际中不会发生；万一耗尽，
+  // 多余的作答计入 skippedNoSlot，不悄悄丢进错误的槽位。
+  const usedSlots = {};
+  Object.values(kcMap || {}).forEach(id => { if (id >= 1 && id <= 123) usedSlots[id - 1] = true; });
+  const slotMap = {};
+  const newIdSlot = {};
+  let nextSlot = 0;
+  function slotFor(skill) {
+    if (skill >= 1 && skill <= 123) return skill - 1;
+    if (newIdSlot[skill] !== undefined) return newIdSlot[skill];
+    while (nextSlot < NSKILL && usedSlots[nextSlot]) nextSlot++;
+    if (nextSlot >= NSKILL) return -1;
+    const s = nextSlot++;
+    usedSlots[s] = true;
+    newIdSlot[skill] = s;
+    slotMap[s] = { id: skill, name: kcNameById(skill) };
+    return s;
+  }
   for (const st of gradebook.students) {
     for (const q of gradebook.questions) {
       const v = st.scores[q.qid];
       if (v === null || v === undefined) { skippedBlank++; continue; }
       const skill = kcMap[q.qid];
-      if (!skill) { skippedNoKC++; continue; }
+      if (!skill || !isValidSkillId(skill)) { skippedNoKC++; continue; }
+      const s = slotFor(skill);
+      if (s < 0) { skippedNoSlot++; continue; }
       // 部分得分：得分按比例进诊断（4/5 分算 0.8），满分算对，0 分算错。
-      rows.push({ student: st.id, q: String(q.qid), s: skill - 1, y: q.full > 0 ? Math.min(1, Math.max(0, v / q.full)) : 0 });
+      rows.push({ student: st.id, q: String(q.qid), s, y: q.full > 0 ? Math.min(1, Math.max(0, v / q.full)) : 0 });
     }
   }
-  return { rows, skippedNoKC, skippedBlank };
+  return { rows, skippedNoKC, skippedBlank, skippedNoSlot, slotMap };
 }
 function computeStats(rows) {
   const byQ = {};
@@ -1489,10 +1660,17 @@ document.getElementById('splitBtn').addEventListener('click', () => {
   const text = document.getElementById('ocrText').value;
   const qs = splitQuestions(text);
   if (!qs.length) { document.getElementById('splitOut').innerHTML = '<p class="muted">没按题号拆出题目：请确认文字里有“1.”“2.”这样的题号，或者直接用办法一上传对应表。</p>'; return; }
-  let html = '<p class="muted">按题号拆出 ' + qs.length + ' 道题，知识点编号请逐题填（1 到 123），填完点下面“用这份对应关系”。也可以先点“自动标注知识点”，按题干关键词预填；或者点“智能标注（LLM）”，用你自己的 Key 调模型来标，调不通时自动改用关键词标注。置信度低的请老师逐题确认。</p><table><caption>拆题结果</caption><thead><tr><th scope="col">题号</th><th scope="col">题干</th><th scope="col">知识点编号</th><th scope="col">自动标注</th></tr></thead><tbody>';
+  let html = '<p class="muted">按题号拆出 ' + qs.length + ' 道题，知识点编号请逐题填（高中库 1001–1085，或旧编号 1–123），也可以点输入框从下拉里选知识点名称；填完点下面“用这份对应关系”。也可以先点“自动标注知识点”，按题干关键词预填；或者点“智能标注（LLM）”，用你自己的 Key 调模型来标，调不通时自动改用关键词标注。置信度低的请老师逐题确认。</p><table><caption>拆题结果</caption><thead><tr><th scope="col">题号</th><th scope="col">题干</th><th scope="col">知识点编号</th><th scope="col">自动标注</th></tr></thead><tbody>';
   qs.forEach((q, i) => {
-    html += `<tr><td>${q.qid}</td><td>${esc(q.stem.slice(0, 60))}</td><td><input type="number" min="1" max="123" data-qi="${i}" style="width:80px" placeholder="如 56" aria-label="第 ${q.qid} 题知识点编号"></td><td><span data-tag-qi="${i}"></span></td></tr>`;
+    html += `<tr><td>${q.qid}</td><td>${esc(q.stem.slice(0, 60))}</td><td><input type="text" list="kcDatalist" data-qi="${i}" style="width:110px" placeholder="如 1074" aria-label="第 ${q.qid} 题知识点编号"></td><td><span data-tag-qi="${i}"></span></td></tr>`;
   });
+  const kcOpts = [];
+  try {
+    const t = window.__kcTagger;
+    const all = ((t && t.HS_BANK) || []).concat((t && t.DEMO_BANK) || []);
+    all.forEach(e => { kcOpts.push(`<option value="${e.id}" label="${esc(e.name)}"></option>`); });
+  } catch (err) {}
+  html += '</tbody></table><datalist id="kcDatalist">' + kcOpts.join('') + '</datalist>';
   const attr = v => esc(String(v || '')).replace(/"/g, '&quot;');
   html += '</tbody></table><p><button id="autoTagBtn" class="secondary">自动标注知识点</button> <button id="llmTagBtn" class="secondary">智能标注（LLM）</button> <button id="applySplitBtn" class="secondary">用这份对应关系</button></p>';
   html += '<div class="llm-settings"><p class="muted">智能标注用你自己的 Key 调模型（默认 OpenRouter），Key 只存在这台浏览器里，不会上传到别处。调不通时自动改用关键词标注。</p>' +
@@ -1506,7 +1684,7 @@ document.getElementById('splitBtn').addEventListener('click', () => {
     document.querySelectorAll('#splitOut input[data-qi]').forEach(inp => {
       const q = qs[+inp.dataset.qi];
       const v = +inp.value;
-      if (v >= 1 && v <= NSKILL) map[q.qid] = v;
+      if (isValidSkillId(v)) map[q.qid] = v;
     });
     if (!Object.keys(map).length) { document.getElementById('kcMsg').innerHTML = '还没填知识点编号。'; return; }
     kcMap = map;
@@ -1533,7 +1711,7 @@ document.getElementById('splitBtn').addEventListener('click', () => {
     if (statusEl) statusEl.textContent = '正在调模型标注…';
     try {
       const bank = buildLLMBank();
-      const kwBank = window.__kcTagger ? window.__kcTagger.buildKCBank(window.__kcTagger.DEMO_BANK) : [];
+      const kwBank = window.__kcTagger ? window.__kcTagger.buildKCBank(window.__kcTagger.HS_BANK || window.__kcTagger.DEMO_BANK) : [];
       const res = await window.__llmTagger.tagQuestionsLLM(qs, bank, {
         fetchFn: fetch.bind(window), baseUrl: s.baseUrl, apiKey: s.apiKey, model: s.model,
         fallback: bqs => window.__kcTagger ? window.__kcTagger.tagQuestions(bqs, kwBank) : bqs.map(q => ({ qid: q.qid, ranked: [] }))
@@ -1555,17 +1733,19 @@ document.getElementById('toStage3').addEventListener('click', () => {
   if (!kcMap) { document.getElementById('kcMsg').innerHTML = '请先上传对应表，或者用 OCR 拆题并确认知识点。'; return; }
   const norm = normalizeToLong(gradebook, kcMap);
   rows = norm.rows;
+  slotKC = norm.slotMap || {};
   if (!rows.length) { document.getElementById('kcMsg').innerHTML = '成绩表和对应表对不上，没有能用的作答。请检查题号是否一致。'; return; }
   const st = computeStats(rows);
   const sum = buildSummary(st);
   let html = `<div class="kpi-row">` + sum.map(k => `<div class="kpi"><b>${k.value}</b><span>${k.label}</span></div>`).join('') + `</div>`;
   html += `<p>学生 ${st.nStudents} 人 · 题目 ${st.nQuestions} 道 · 作答 ${st.nRows} 条 · 整体正确率 ${(st.fullRate * 100).toFixed(1)}% · 平均得分率 ${(st.acc * 100).toFixed(1)}%` +
     (norm.skippedNoKC ? ` · ${norm.skippedNoKC} 条作答没有知识点对应关系，已跳过` : '') +
+    (norm.skippedNoSlot ? ` · ${norm.skippedNoSlot} 条作答的知识点超出诊断容量，已跳过` : '') +
     (norm.skippedBlank ? ` · ${norm.skippedBlank} 个空格已跳过` : '') + '</p>';
   html += `<h3>每题正确率（从低到高）</h3><table><caption>每题正确率</caption><thead><tr><th scope="col">题号</th><th scope="col">知识点</th><th scope="col" class="num">做过人数</th><th scope="col" class="num">正确率</th><th scope="col" class="num">平均得分率</th></tr></thead><tbody>`;
   st.byQ.forEach(x => { html += `<tr><td>第 ${x.q} 题</td><td>${kcMap[x.q] || '—'} 号</td><td class="num">${x.n}</td><td class="num">${(x.fullRate * 100).toFixed(0)}%</td><td class="num">${(x.acc * 100).toFixed(0)}%</td></tr>`; });
   html += `</tbody></table><h3>每知识点得分率</h3><table><caption>每知识点得分率</caption><thead><tr><th scope="col">知识点</th><th scope="col" class="num">作答数</th><th scope="col" class="num">得分率</th><th scope="col"></th></tr></thead><tbody>`;
-  st.byS.forEach(x => { html += `<tr><td>${x.s + 1} 号${skillName(x.s)}</td><td class="num">${x.n}</td><td class="num">${(x.acc * 100).toFixed(0)}%</td><td><div class="mini-bar"><i style="width:${Math.round(x.acc * 100)}%"></i></div></td></tr>`; });
+  st.byS.forEach(x => { html += `<tr><td>${skillLabel(x.s)}</td><td class="num">${x.n}</td><td class="num">${(x.acc * 100).toFixed(0)}%</td><td><div class="mini-bar"><i style="width:${Math.round(x.acc * 100)}%"></i></div></td></tr>`; });
   html += '</tbody></table>';
   document.getElementById('statsOut').innerHTML = html;
   show('stage3'); setStep(3);
@@ -1585,17 +1765,21 @@ document.getElementById('toStage4').addEventListener('click', () => {
     <span><i class="dot mid"></i>中等（0.5–0.7）：<b>${tiers['中']}</b> 个知识点</span>
     <span><i class="dot weak"></i>偏弱（&lt;0.5）：<b>${tiers['弱']}</b> 个知识点</span>
   </div>`;
-  html += `<table><caption>掌握度最低的 15 个知识点</caption><thead><tr><th scope="col">知识点</th><th scope="col" class="num">掌握度</th><th scope="col"></th><th scope="col">证据</th><th scope="col" class="num">本次得分率</th><th scope="col">错得最多的题</th></tr></thead><tbody>`;
-  order.slice(0, 15).forEach(s => {
+  // 先列考到过的知识点（按掌握度从低到高），再补没考到的推断项：只按掌握度排，
+  // 一张只有 5 个知识点的卷子会把 15 行全让给没考到的推断项，老师看不到考过的诊断。
+  // 演示不受影响（考过的 92/48 本来就在前 15 行里）。
+  const tableRows = [...order.filter(s => testedN[s] >= 3), ...order.filter(s => testedN[s] < 3)].slice(0, 15);
+  html += `<table><caption>知识点掌握度（考到过的在前）</caption><thead><tr><th scope="col">知识点</th><th scope="col" class="num">掌握度</th><th scope="col"></th><th scope="col">证据</th><th scope="col" class="num">本次得分率</th><th scope="col">错得最多的题</th></tr></thead><tbody>`;
+  tableRows.forEach(s => {
     const ev = testedN[s] >= 3;
     const topQ = Object.entries(missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([q, n]) => `第 ${q} 题（${n}人错）`).join('、') || '—';
-    html += `<tr><td>${s + 1} 号${skillName(s)}</td><td class="num">${mastery[s].toFixed(2)}</td>
+    html += `<tr><td>${skillLabel(s)}</td><td class="num">${mastery[s].toFixed(2)}</td>
       <td><div class="bar"><i style="width:${Math.round(mastery[s] * 100)}%"></i></div></td>
       <td><span class="badge ${ev ? 'ev' : 'inf'}">${ev ? '有证据' : '推断'}</span> ${testedN[s] ? (testedN[s] | 0) + ' 人次' : '本次未考'}</td>
       <td class="num">${testedN[s] ? (testedC[s] / testedN[s] * 100).toFixed(0) + '%' : '未考'}</td>
       <td>${topQ}</td></tr>`;
   });
-  html += `</tbody></table><p class="muted">只列掌握度最低的 15 个知识点。推断项本次考试没考到，讲评时只作“下次覆盖”的参考。</p>`;
+  html += `</tbody></table><p class="muted">先列考到过的知识点（按掌握度从低到高，最多 15 个），再补没考到的推断项。推断项本次考试没考到，讲评时只作“下次覆盖”的参考。</p>`;
   const weakTested = order.filter(s => testedN[s] >= 3).slice(0, 5);
   if (weakTested.length) {
     const stu = Object.entries(diagnosis.perStudent).map(([sid, m]) => ({
@@ -1611,7 +1795,11 @@ document.getElementById('toStage4').addEventListener('click', () => {
 });
 function buildOutline() {
   const { mastery, testedN, testedC, missQ, order } = diagnosis;
-  const main = order.filter(s => testedN[s] >= 3 && mastery[s] < 0.6);
+  // 重点讲：考到 3 人次以上，且掌握度 < 0.6 或本次得分率 < 0.5。
+  // 得分率是直接证据：高中库知识点复用旧引擎的先验与关联结构时，掌握度会被先验
+  // 和平滑拉高（模拟高中卷上导数应用得分率只有 0.29，掌握度却有 0.61），只看掌握度
+  // 会把最弱的知识点漏掉。演示数据不受影响（只有 92 号得分率 < 0.5，本来就在重点讲里）。
+  const main = order.filter(s => testedN[s] >= 3 && (mastery[s] < 0.6 || testedC[s] / testedN[s] < 0.5));
   const next = order.filter(s => testedN[s] < 3 && mastery[s] < 0.5).slice(0, 5);
   let items = [];
   main.forEach(s => items.push({ s, kind: '讲', mastery: mastery[s] }));
@@ -1630,7 +1818,7 @@ function renderOutline() {
       : '本次考试未直接考到';
     const acc = diagnosis.testedN[s] ? `班级得分率 ${(diagnosis.testedC[s] / diagnosis.testedN[s] * 100).toFixed(0)}%` : '本次考试未考';
     html += `<div class="outline-item" data-idx="${idx}">
-      <div class="oi-head"><h4${it.kind === '讲' ? ' class="mark-weak"' : ''}>${idx + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${s + 1} 号${skillName(s)}知识点</h4>
+      <div class="oi-head"><h4${it.kind === '讲' ? ' class="mark-weak"' : ''}>${idx + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${skillLabel(s)}知识点</h4>
       <span class="rowbtns"><button class="small ghost" onclick="moveItem(${idx},-1)">上移</button>
       <button class="small ghost" onclick="moveItem(${idx},1)">下移</button>
       <button class="small danger" onclick="delItem(${idx})">删</button></span></div>
@@ -1665,7 +1853,7 @@ function buildOutlineMd() {
   items.forEach((it, i) => {
     const s = it.s, d = diagnosis;
     const topQ = Object.entries(d.missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([q, n]) => `第 ${q} 题（${n} 人错）`).join('、') || '本次考试未直接考到';
-    md += `${i + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${s + 1} 号知识点（掌握度 ${it.mastery.toFixed(2)}）\n   错题示例：${topQ}\n\n`;
+    md += `${i + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${skillShort(s)}知识点（掌握度 ${it.mastery.toFixed(2)}）\n   错题示例：${topQ}\n\n`;
   });
   return md;
 }
@@ -1688,7 +1876,8 @@ document.getElementById('exportWordBtn').addEventListener('click', () => {
   const items = (window._outline || []).map(it => {
     const s = it.s, d = diagnosis;
     const topQ = Object.entries(d.missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([q, n]) => `第 ${q} 题（${n} 人错）`).join('、') || null;
-    return { kind: it.kind, skill: s + 1, mastery: it.mastery, acc: d.testedN[s] ? d.testedC[s] / d.testedN[s] : null, topQ };
+    const kc = slotKC[s];
+    return { kind: it.kind, skill: kc ? kc.id : s + 1, skillName: kc ? kc.name : '', mastery: it.mastery, acc: d.testedN[s] ? d.testedC[s] / d.testedN[s] : null, topQ };
   });
   const doc = window.__wordExport.buildWordDoc(items, { title: '讲评提纲', date: new Date().toISOString().slice(0, 10) });
   const blob = new Blob([doc.content], { type: doc.mime });
