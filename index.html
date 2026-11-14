@@ -530,16 +530,28 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
       </div>
       <button id="adminLoginBtn" type="button">进入后台</button>
       <p class="muted" id="adminLoginMsg" role="status"></p>
+      <p><button id="adminForgotBtn" class="small ghost" type="button">忘记管理员密码？</button></p>
+      <div id="adminRecover" class="hidden">
+        <p>管理员密码只存在这台浏览器里，忘了解不开，只能在本机清除后重新设置。<strong>清除只清管理员密码</strong>，老师账号、考试记录和设置都不动。清除后要重新设置一个新密码（至少 8 位）。恢复操作会记进恢复记录，管理员登录后能看到。</p>
+        <div class="field-grid">
+          <label>输入“清除管理员密码”确认<input id="adminRecoverPhrase" autocomplete="off" placeholder="清除管理员密码"></label>
+        </div>
+        <button id="adminRecoverBtn" class="small danger" type="button">清除管理员密码</button>
+        <p class="muted" id="adminRecoverMsg" role="status"></p>
+      </div>
     </div>
     <div id="adminPanel" class="hidden">
       <div id="adminStats"></div>
       <div id="adminKc"></div>
       <div id="adminUsers"></div>
       <div id="adminResetOut" class="muted" role="status"></div>
+      <p class="muted">忘了管理员密码：在后台登录页点“忘记管理员密码？”，按提示清除后重新设置；恢复操作会记在下面的恢复记录里。</p>
+      <div id="adminAudit"></div>
       <button id="adminLogoutBtn" class="small ghost" type="button">退出后台</button>
     </div>
   </div>
 
+  <p class="callout" id="resumeBanner" hidden>上次做到第 <span id="resumeStepText">—</span> 步，还没做完：<span id="resumeText">—</span> <button class="btn" id="resumeDiscardBtn" type="button">重新开始</button></p>
   <div class="card" id="stage1">
     <h2>第 1 步 · 上传成绩表</h2>
     <p class="muted">宽表，老师登分用的样子：第一列学号，第二列姓名，之后每列一道题，列名写成“第 N 题（X 分）”标明满分；最后一列总分可有可无。支持 Excel（.xlsx）和 CSV。得分按比例进诊断：得 4/5 分算 0.8，满分算对，0 分算错；空白格不算 0 分。</p>
@@ -2282,6 +2294,28 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   }
   function adminLogout() { remove(ADMIN_SESSION_KEY); }
   function adminLoggedIn() { return !!readJson(ADMIN_SESSION_KEY, null); }
+  // ---- 管理员密码恢复（A22）：本机操作清除后重新设置 ----
+  // 忘了解不开：没有邮箱、没有短信、没有后门。只能在这台浏览器里，
+  // 输入确认短语清除管理员密码，再按首次使用重新设置一个新密码。
+  // 清除只动管理员自己的两条记录（密码 + 会话），老师账号、考试记录、
+  // 设置一律不动；每次清除都记一条恢复记录，管理员登录后能在后台看到。
+  var ADMIN_AUDIT_KEY = 'examReviewAdminAudit';
+  var ADMIN_CLEAR_PHRASE = '清除管理员密码';
+  function listAdminAudit() {
+    var list = readJson(ADMIN_AUDIT_KEY, []);
+    return Array.isArray(list) ? list.slice() : [];
+  }
+  function clearAdminPassword(phrase) {
+    if (typeof phrase !== 'string' || phrase.trim() !== ADMIN_CLEAR_PHRASE) return Promise.resolve({ ok: false, error: '请输入“清除管理员密码”确认，输错了不清除。' });
+    var cred = readJson(ADMIN_KEY, null);
+    if (!cred) return Promise.resolve({ ok: false, error: '还没设置管理员密码，不用清除。' });
+    remove(ADMIN_KEY);
+    remove(ADMIN_SESSION_KEY);
+    var list = listAdminAudit();
+    list.push({ at: Date.now(), action: 'clear', detail: '管理员密码已清除（恢复操作），需重新设置' });
+    writeJson(ADMIN_AUDIT_KEY, list);
+    return Promise.resolve({ ok: true });
+  }
   function changeAdminPassword(oldPassword, newPassword) {
     var cred = readJson(ADMIN_KEY, null);
     if (!cred) return Promise.resolve({ ok: false, error: '还没设置管理员密码。' });
@@ -2322,6 +2356,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     USERS_KEY: USERS_KEY,
     SESSION_KEY: SESSION_KEY,
     ADMIN_KEY: ADMIN_KEY,
+    ADMIN_AUDIT_KEY: ADMIN_AUDIT_KEY,
+    ADMIN_CLEAR_PHRASE: ADMIN_CLEAR_PHRASE,
     MIN_PASSWORD: MIN_PASSWORD,
     MIN_ADMIN_PASSWORD: MIN_ADMIN_PASSWORD,
     validateEmail: validateEmail,
@@ -2341,6 +2377,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     adminLogout: adminLogout,
     adminLoggedIn: adminLoggedIn,
     changeAdminPassword: changeAdminPassword,
+    clearAdminPassword: clearAdminPassword,
+    listAdminAudit: listAdminAudit,
     adminStats: adminStats,
     _sha256Sync: sha256Sync
   };
@@ -2577,7 +2615,9 @@ let rows = [];          // {student, q, s(0-based), y}
 let diagnosis = null;
 let audit = [];
 
+let currentStep = 1;
 function setStep(n) {
+  currentStep = n;
   document.querySelectorAll('#stepper .step').forEach(el => {
     const s = +el.dataset.s;
     el.classList.toggle('done', s < n);
@@ -2592,6 +2632,97 @@ function setStep(n) {
   }
 }
 function show(id) { document.getElementById(id).classList.remove('hidden'); }
+// ---- 断点续做（A26）：流程草稿只存在这台浏览器里，跟账号走（登录后按账号分开存） ----
+// 存已确认的步骤结果（成绩表、空白处理、知识点对应、错卷、诊断、提纲）；第 2 步
+// 没确认的中间态（OCR 拆题表、低置信度清单）不存，恢复后点一下“拆题/自动标注”重跑。
+const DRAFT_VERSION = 1;
+function draftKey() {
+  try { return 'examReviewDraft' + (window.__auth && window.__auth.currentUser() ? ':' + window.__auth.currentUser() : ''); }
+  catch (e) { return 'examReviewDraft'; }
+}
+function readDraft() {
+  try {
+    const raw = localStorage.getItem(draftKey());
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || d.v !== DRAFT_VERSION || !d.gradebook || !Array.isArray(d.gradebook.students) || !d.gradebook.students.length) return null;
+    if (typeof d.step !== 'number' || d.step < 1 || d.step > 5) return null;
+    return d;
+  } catch (e) { return null; }
+}
+function saveDraft() {
+  if (!gradebook || !gradebook.students || !gradebook.students.length) return false;
+  try {
+    const d = {
+      v: DRAFT_VERSION, savedAt: new Date().toLocaleString(), step: currentStep,
+      gradebook, blankState, kcMap, tagMeta, cuojuan, cjUnparsed,
+      ocrText: (document.getElementById('ocrText') || {}).value || '',
+      outline: { items: window._outline || null, version: outlineVersion, history: outlineHistory, deleted: deletedItems },
+    };
+    localStorage.setItem(draftKey(), JSON.stringify(d));
+    return true;
+  } catch (e) { return false; }
+}
+function clearDraft() { try { localStorage.removeItem(draftKey()); } catch (e) {} }
+function restoreDraft() {
+  const d = readDraft();
+  if (!d) return false;
+  gradebook = d.gradebook;
+  blankState = d.blankState || { total: 0, handled: true, mode: '' };
+  kcMap = d.kcMap || {};
+  tagMeta = d.tagMeta || {};
+  cuojuan = d.cuojuan || {};
+  cjUnparsed = d.cjUnparsed || [];
+  if (d.ocrText) { const t = document.getElementById('ocrText'); if (t) t.value = d.ocrText; }
+  if (d.outline) {
+    window._outline = d.outline.items;
+    outlineVersion = d.outline.version || 1;
+    outlineHistory = d.outline.history || [];
+    deletedItems = d.outline.deleted || [];
+  }
+  // 诊断、提纲由成绩表 + 对应表重算（不存结果，保证恢复后的数字和当场跑的一致）。
+  let norm = null;
+  if (Object.keys(kcMap).length) {
+    norm = normalizeToLong(gradebook, kcMap);
+    rows = norm.rows; slotKC = norm.slotMap || {}; diagnosis = diagnoseClass(rows);
+  } else if (d.step >= 3) {
+    d.step = 2; // 没对应表，第 3 步起的结果算不出来，回到第 2 步
+  }
+  renderCuojuan(); renderCjUnparsed(); renderIssues(gradebook.issues); renderFullMarks(); updateStage2Gate();
+  // 恢复到断的那一步：第 1 步已确认（成绩表已在），第 2 步已确认（对应表已在）才往后走。
+  const step = d.step;
+  if (step >= 2) { show('stage2'); if (Object.keys(kcMap).length) { document.getElementById('kcMsg').innerHTML = `对应表已恢复：${Object.keys(kcMap).length} 道题。`; document.getElementById('toStage3').disabled = false; } }
+  if (step >= 3) { show('stage3'); renderStats(computeStats(rows), norm); }
+  if (step >= 4) { show('stage4'); renderDiagnosis(); }
+  if (step >= 5) { show('stage5'); renderOutline(); }
+  setStep(step);
+  const banner = document.getElementById('resumeBanner');
+  if (banner) {
+    document.getElementById('resumeStepText').textContent = String(step);
+    document.getElementById('resumeText').textContent = `${gradebook.students.length} 名学生 × ${Object.keys(kcMap).length || '—'} 道题的对应表，${d.savedAt} 存的。`;
+    banner.hidden = false;
+  }
+  toast(`已恢复到第 ${step} 步。`);
+  return true;
+}
+// 上传新成绩表：旧一场的状态全清（成绩表、对应表、错卷、诊断、提纲），免得旧结果混进新考试。
+function resetFlowForNewUpload() {
+  clearDraft();
+  gradebook = { students: [], questions: [] };
+  blankState = { total: 0, handled: true, mode: '' };
+  kcMap = {}; tagMeta = {}; cuojuan = {}; cjUnparsed = [];
+  rows = []; slotKC = {}; diagnosis = null;
+  window._outline = null; outlineVersion = 1; outlineHistory = []; deletedItems = [];
+  lowConfList = [];
+  ['stage2', 'stage3', 'stage4', 'stage5'].forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
+  const kcMsg = document.getElementById('kcMsg'); if (kcMsg) kcMsg.innerHTML = '';
+  const t3 = document.getElementById('toStage3'); if (t3) t3.disabled = true;
+  const so = document.getElementById('splitOut'); if (so) so.innerHTML = '';
+  const ocrOut = document.getElementById('ocrOut'); if (ocrOut) ocrOut.classList.add('hidden');
+  const ocrText = document.getElementById('ocrText'); if (ocrText) ocrText.value = '';
+  renderCuojuan(); renderCjUnparsed();
+  setStep(1);
+}
 let toastTimer = null;
 function toast(msg) {
   const t = document.getElementById('toast');
@@ -3084,6 +3215,7 @@ function saveCauseSettings() {
   renderCuojuan();
   if (msg) msg.textContent = changed.length ? '已保存：' + changed.join('、') + '。新记的错卷和诊断、提纲里都用新名字。' : '名字没变，不用保存。';
   if (changed.length) logAudit('改错因分类：' + changed.join('、'));
+  if (changed.length) saveDraft();
   return true;
 }
 // 恢复默认五类：配置清掉，已记的错卷按槽位改回默认名。
@@ -3098,6 +3230,7 @@ function resetCauseSettings() {
   const msg = document.getElementById('causeMsg');
   if (msg) msg.textContent = '已恢复默认五类：概念不清、审题错误、计算失误、方法不当、书写规范。';
   logAudit('错因分类恢复默认五类');
+  saveDraft();
   return true;
 }
 // ---------- 典型错卷（v1.4）：逐条加 + 粘贴笔记解析 ----------
@@ -3575,6 +3708,7 @@ function bumpOutlineVersion(reason) {
   if (outlineHistory.length > 10) outlineHistory = outlineHistory.slice(-10);
   attachOutlineSnapshot();
   logAudit(`提纲改成第 ${outlineVersion} 版（${reason}）`);
+  saveDraft();
 }
 function moveOutlineItem(items, from, to) {
   const list = (items || []).slice();
@@ -3612,8 +3746,8 @@ window.showOutlineVersion = function (v) {
 };
 
 // expose pure core for Node testing
-if (typeof window !== 'undefined') window.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, getTagMeta: () => tagMeta, setTagMetaFromMap, scoreDistribution, diagnosisSummary, groupStudents, getGroupCuts: () => groupCuts, moveOutlineItem, getOutlineVersion: () => outlineVersion, getOutlineHistory: () => outlineHistory, getDeletedItems: () => deletedItems, getOutline: () => window._outline, getUnparsedCuojuan: () => cjUnparsed, getCauses: () => effectiveCauses.slice(), getBankInfo: () => activeBankMeta(), getBankLine: () => bankLineText(), MODEL };
-if (typeof globalThis !== 'undefined') globalThis.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, getTagMeta: () => tagMeta, setTagMetaFromMap, scoreDistribution, diagnosisSummary, groupStudents, getGroupCuts: () => groupCuts, moveOutlineItem, getOutlineVersion: () => outlineVersion, getOutlineHistory: () => outlineHistory, getDeletedItems: () => deletedItems, getOutline: () => window._outline, getUnparsedCuojuan: () => cjUnparsed, getCauses: () => effectiveCauses.slice(), getBankInfo: () => activeBankMeta(), getBankLine: () => bankLineText(), MODEL };
+if (typeof window !== 'undefined') window.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, getTagMeta: () => tagMeta, setTagMetaFromMap, scoreDistribution, diagnosisSummary, groupStudents, getGroupCuts: () => groupCuts, moveOutlineItem, getOutlineVersion: () => outlineVersion, getOutlineHistory: () => outlineHistory, getDeletedItems: () => deletedItems, getOutline: () => window._outline, saveDraft, restoreDraft, clearDraft, getDraft: () => readDraft(), getCurrentStep: () => currentStep, getDraftKey: () => draftKey(), getBlankState: () => ({...blankState}), getCuojuan: () => cuojuan, getUnparsedCuojuan: () => cjUnparsed, getCauses: () => effectiveCauses.slice(), getBankInfo: () => activeBankMeta(), getBankLine: () => bankLineText(), getAdminAudit: () => window.__auth.listAdminAudit(), MODEL };
+if (typeof globalThis !== 'undefined') globalThis.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, getTagMeta: () => tagMeta, setTagMetaFromMap, scoreDistribution, diagnosisSummary, groupStudents, getGroupCuts: () => groupCuts, moveOutlineItem, getOutlineVersion: () => outlineVersion, getOutlineHistory: () => outlineHistory, getDeletedItems: () => deletedItems, getOutline: () => window._outline, saveDraft, restoreDraft, clearDraft, getDraft: () => readDraft(), getCurrentStep: () => currentStep, getDraftKey: () => draftKey(), getBlankState: () => ({...blankState}), getCuojuan: () => cuojuan, getUnparsedCuojuan: () => cjUnparsed, getCauses: () => effectiveCauses.slice(), getBankInfo: () => activeBankMeta(), getBankLine: () => bankLineText(), getAdminAudit: () => window.__auth.listAdminAudit(), MODEL };
 
 // 空白格处理状态（A3）：每张表载入时重置；老师点了批量处理才算处理完，
 // 处理完之前“确认成绩表”按钮点不动；处理记录进审计。
@@ -3663,6 +3797,7 @@ function handleBlanks(mode) {
   updateStage2Gate();
   logAudit(`空白格处理：${mode === 'zero' ? '全部补 0 分' : '全部按缺考处理'}（${n} 个）`);
   toast(mode === 'zero' ? `已把 ${n} 个空白补 0 分。` : `已把 ${n} 个空白按缺考处理。`);
+  saveDraft();
 }
 function applyGradebook(gb, label) {
   const nBlank = blankIssues(gb).length;
@@ -3677,6 +3812,7 @@ function applyGradebook(gb, label) {
   updateStage2Gate();
   recordUpload(label, gb.students.length, gb.questions.length, nRows);
   logAudit(`载入成绩表：${gb.students.length} 名学生，${gb.questions.length} 道题，${gb.issues.length} 条提示`);
+  saveDraft();
 }
 // 满分确认（A2）：确认页逐列标满分与依据；改一列就重算（下面给各题平均得分率预览）。
 function fullMarksPreview() {
@@ -3719,6 +3855,7 @@ function setFullMarks(qid, value) {
   renderIssues(gradebook.issues);
   renderFullMarks();
   logAudit(`第 ${qid} 题满分改成 ${v} 分（原来 ${old} 分），已重算`);
+  saveDraft();
   return true;
 }
 // 长表：student,question,skill,score[,full]（M1 原型格式）。
@@ -3726,6 +3863,7 @@ function setFullMarks(qid, value) {
 // 第 5 列是满分，得分按比例进诊断。长表自带知识点列，所以对应关系直接从
 // 长表里取，不用再传对应表；同时建成和宽表一样的成绩表，后面走同一条路。
 function loadLongTableText(text, label) {
+  resetFlowForNewUpload();
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const studentsMap = {};
   const qFull = {};
@@ -3775,6 +3913,7 @@ function loadLongTableText(text, label) {
   logAudit(`载入成绩表（长表）：${nRows} 条作答${skipped ? `，${skipped} 行跳过` : ''}`);
 }
 function loadGradebookText(text, label) {
+  resetFlowForNewUpload();
   const first = (text.split(/\r?\n/)[0] || '').toLowerCase();
   if (first.includes('student')) { loadLongTableText(text, label); return; }
   const colMap = loadColMap();
@@ -3792,6 +3931,7 @@ function applyTemplateKC() {
   document.getElementById('kcMsg').innerHTML = `对应关系已从成绩表里的“知识点”行取到：${Object.keys(tk).length} 道题有知识点。`;
   document.getElementById('toStage3').disabled = false;
   logAudit(`对应表已从成绩表取到：${Object.keys(tk).length} 道题`);
+  saveDraft();
 }
 // 标准模板（A4）：下载 + 上传页迷你示例，共用同一份 TEMPLATE_CSV。
 function buildStandardTemplate() { return TEMPLATE_CSV; }
@@ -3824,6 +3964,7 @@ function downloadTemplate() {
 document.getElementById('templateBtn').addEventListener('click', downloadTemplate);
 // 从 Excel 粘贴：Tab 分隔或逗号分隔都认，宽表和长表都认，列名对应关系记下来下次复用。
 function loadPastedTable(text) {
+  resetFlowForNewUpload();
   const first = (text.split(/\r?\n/)[0] || '').toLowerCase();
   if (first.includes('student')) { loadLongTableText(text, '粘贴成绩表'); return; }
   const pasted = parsePastedTable(text);
@@ -3869,19 +4010,22 @@ document.getElementById('gradeFile').addEventListener('change', e => {
   if (f) loadGradebookFile(f);
 });
 document.getElementById('demoBtn').addEventListener('click', () => {
+  // 先载成绩表（里面会清掉上一场的状态），再放对应表：顺序不能反，不然对应表会被清掉。
+  loadGradebookText(MOCK_WIDE_CSV, '模拟数据');
   const kc = parseKCMap(MOCK_KC_CSV);
   kcMap = kc.map;
   setTagMetaFromMap(kc.map, '对应表');
   document.getElementById('kcMsg').innerHTML = `模拟对应表已载入：${Object.keys(kcMap).length} 道题，5 个知识点。`;
   document.getElementById('toStage3').disabled = false;
   refreshCuojuanSkills();
-  loadGradebookText(MOCK_WIDE_CSV, '模拟数据');
+  saveDraft();
   logAudit('加载模拟数据');
   toast('模拟数据已载入');
 });
 document.getElementById('toStage2').addEventListener('click', () => {
   if (blankState.total > 0 && !blankState.handled) { toast('表里还有空白格没处理：先点“全部按缺考处理”或“全部补 0 分”。'); return; }
   show('stage2'); setStep(2);
+  saveDraft();
   logAudit('确认成绩表，进入试卷处理');
 });
 document.getElementById('kcFile').addEventListener('change', e => {
@@ -3898,6 +4042,7 @@ document.getElementById('kcFile').addEventListener('change', e => {
     document.getElementById('toStage3').disabled = Object.keys(kcMap).length === 0;
     logAudit(`载入题目与知识点对应表：${Object.keys(kcMap).length} 道题`);
     refreshCuojuanSkills();
+    saveDraft();
   };
   rd.readAsText(f);
 });
@@ -3912,6 +4057,7 @@ document.getElementById('cjAddBtn').addEventListener('click', () => {
   document.getElementById('cjMsg').textContent = `已记第 ${qid} 题的典型错卷。`;
   document.getElementById('cjTypical').value = '';
   logAudit(`记典型错卷：第 ${qid} 题`);
+  saveDraft();
 });
 // 典型错卷：粘贴改卷笔记，每行一条，按行解析
 document.getElementById('cjParseBtn').addEventListener('click', () => {
@@ -3933,6 +4079,7 @@ document.getElementById('cjParseBtn').addEventListener('click', () => {
     (unclassified ? `，其中 ${unclassified} 条错因没归上类，请在上面表里逐条确认` : '') +
     (cjUnparsed.length ? `；${cjUnparsed.length} 行没解析出来，列在下面，请手工补或忽略` : '') + '。';
   logAudit(`解析改卷笔记：${res.notes.length} 条典型错卷，${res.skipped.length} 行跳过`);
+  saveDraft();
 });
 
 document.getElementById('causeSaveBtn').addEventListener('click', saveCauseSettings);
@@ -4099,6 +4246,7 @@ document.getElementById('splitBtn').addEventListener('click', () => {
       (nCj ? `其中 ${nCj} 道题记了典型错卷。` : '');
     document.getElementById('toStage3').disabled = false;
     logAudit(`OCR 拆题并确认对应关系：${Object.keys(map).length} 道题${nCj ? `，${nCj} 条典型错卷` : ''}`);
+    saveDraft();
   });
   document.getElementById('autoTagBtn').addEventListener('click', () => runKeywordTag(qs));
   ['llmBaseUrl', 'llmKey', 'llmModel'].forEach(id => {
@@ -4179,12 +4327,14 @@ document.getElementById('toStage3').addEventListener('click', () => {
   renderStats(st, norm);
   if (kcMap) recordUploadSkills([...new Set(Object.values(kcMap))]);
   show('stage3'); setStep(3);
+  saveDraft();
   logAudit('确认试卷，进入统计');
 });
 document.getElementById('toStage4').addEventListener('click', () => {
   diagnosis = diagnoseClass(rows);
   renderDiagnosis();
   show('stage4'); setStep(4);
+  saveDraft();
   logAudit('确认统计，进入诊断');
 });
 // 某条知识点结论来自哪几道题、每道题是谁标的、置信度多少（A10）。
@@ -4230,6 +4380,7 @@ window.changeQuestionSkill = function (qid, value) {
   renderDiagnosis();
   logAudit(`改第 ${qid} 题知识点：${old} 号 → ${v} 号，诊断已重算`);
   toast(`第 ${qid} 题知识点已改成 ${v} 号，诊断已重算。`);
+  saveDraft();
   return true;
 };
 function renderDiagnosis() {
@@ -4349,6 +4500,7 @@ document.getElementById('toStage5').addEventListener('click', () => {
   renderOutline();
   attachOutlineSnapshot();
   show('stage5'); setStep(5);
+  saveDraft();
   logAudit('确认诊断，进入讲评提纲');
 });
 window.moveItem = function (idx, d) {
@@ -4611,6 +4763,8 @@ function refreshAdminUI() {
     renderAdminPanel();
   } else {
     setup.classList.add('hidden'); login.classList.remove('hidden'); panel.classList.add('hidden');
+    const rec = document.getElementById('adminRecover');
+    if (rec) rec.classList.add('hidden');
   }
 }
 function renderAdminPanel() {
@@ -4656,6 +4810,14 @@ function renderAdminPanel() {
       renderAdminPanel();
     }));
   }
+  // 恢复记录（A22）：清除管理员密码的操作留在这里，管理员登录后能看到。
+  const auditEl = document.getElementById('adminAudit');
+  if (auditEl) {
+    const recs = a.listAdminAudit();
+    auditEl.innerHTML = recs.length
+      ? '<h3>恢复记录</h3><ul>' + recs.slice().reverse().map(r => `<li>${esc(new Date(r.at).toLocaleString())} ${esc(r.detail || '管理员密码已清除（恢复操作）')}</li>`).join('') + '</ul>'
+      : '<h3>恢复记录</h3><p class="muted">暂无恢复记录。</p>';
+  }
 }
 document.getElementById('adminEntryLink').addEventListener('click', (e) => {
   if (e && e.preventDefault) e.preventDefault();
@@ -4677,6 +4839,23 @@ document.getElementById('adminLoginBtn').addEventListener('click', async () => {
   if (msg) msg.textContent = ok ? '' : '密码不对，请再试一次。';
   if (ok) { document.getElementById('adminPw').value = ''; refreshAdminUI(); }
 });
+// 忘记管理员密码（A22）：本机清除后重新设置。清除前要输入确认短语，
+// 防手滑；清除只清管理员密码，老师账号和数据不动，操作记进审计。
+document.getElementById('adminForgotBtn').addEventListener('click', () => {
+  const rec = document.getElementById('adminRecover');
+  if (rec) rec.classList.toggle('hidden');
+});
+document.getElementById('adminRecoverBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('adminRecoverMsg');
+  const phrase = document.getElementById('adminRecoverPhrase').value;
+  const res = await window.__auth.clearAdminPassword(phrase);
+  if (!res.ok) { if (msg) msg.textContent = res.error; return; }
+  document.getElementById('adminRecoverPhrase').value = '';
+  const setMsg = document.getElementById('adminSetMsg');
+  if (setMsg) setMsg.textContent = '管理员密码已清除，请重新设置一个新密码（至少 8 位）。';
+  logAudit('管理员密码已清除（恢复操作），请重新设置新密码。');
+  refreshAdminUI();
+});
 document.getElementById('adminLogoutBtn').addEventListener('click', () => {
   if (window.__auth) window.__auth.adminLogout();
   refreshAdminUI();
@@ -4696,6 +4875,9 @@ renderTemplateExample();
 wireDensityBtn('densityBtn3');
 wireDensityBtn('densityBtn4');
 setStep(1);
+// 断点续做（A26）：打开页面时，有未做完的草稿就恢复到断的那一步；点“重新开始”清草稿重来。
+document.getElementById('resumeDiscardBtn').addEventListener('click', () => { clearDraft(); location.reload(); });
+restoreDraft();
 </script>
 </body>
 </html>
