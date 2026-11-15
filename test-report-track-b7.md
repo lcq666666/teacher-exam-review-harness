@@ -205,3 +205,21 @@ A25 计时（vm 沙箱，纯计算，不含浏览器渲染与网络）：
 - Word 导出改成真 .docx（A16，OOXML，A4 讲义，导出前预览、下载前校验，Python zipfile 复核通过）；.doc 生成函数还留在模块里（测试覆盖），页面上不再提供 .doc 下载。
 - S4 离线：除 OCR 和 LLM 标注需要联网外，上传、诊断、导出都能离线用。
 - 下一站（本地范围）：登录与管理员只存在这台浏览器里，不联网、不设默认密码；管理员默认看不到老师的学生数据，统计只计数。云同步未做，登录页已写明“云同步即将上线”。合作伙伴名单为空，等用户给名单。
+
+## 补跑回归（2026-11-15 约 19:20，环境恢复后）
+
+B7 交付时 exec 环境写文件报 "Operation not permitted"，a7、M2 彩排、彩排修复、b1、b2、b3、UX、b4、b5、b6 共十项无头检查没跑成。环境恢复后（/tmp 与 workspace 写文件均已正常）全部补跑，一次通过，零页面错误，零 FAIL：
+
+- check-track-a7.js：25/25
+- check-m2-rehearsal.js：通过，零页面错误（无计数输出，退出码 0）
+- check-rehearsal-fixes.js：34/34
+- check-track-b1.js：64/64
+- check-track-b2.js：76/76
+- check-track-b3.js：108/108
+- check-track-ux.js：142/142
+- check-track-b4.js：128/128
+- check-track-b5.js：78/78
+- check-track-b6.js：60/60
+- check-track-b7.js（重跑确认）：58/58
+
+补跑前重建了 /tmp 夹具（/tmp/kc-demo.csv 为 files/模拟试卷知识点对应表.csv 的复制；/tmp/b6-second.csv 为 files/模拟成绩表.csv 把第 9、10 题改成 5 分并重算总分）。补跑通过后推 B7：main c193fcba，redpen 7b276950；线上逐字节核对通过。
