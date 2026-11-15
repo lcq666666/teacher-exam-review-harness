@@ -344,7 +344,16 @@ input[type=file]::file-selector-button { background: var(--surface-muted); color
   .outline-item { break-inside: avoid; }
   table { break-inside: avoid; }
   .tier-bar, .bar, .mini-bar, .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body.print-handout header, body.print-handout .steps, body.print-handout .progress, body.print-handout .toast, body.print-handout .site-nav, body.print-handout .site-footer, body.print-handout #auditCard, body.print-handout #authCard, body.print-handout #adminCard, body.print-handout .sample-card, body.print-handout .flow3, body.print-handout .pricing, body.print-handout .trust-card, body.print-handout #stage1, body.print-handout #stage2, body.print-handout #stage3, body.print-handout #stage4, body.print-handout #stage5 > h2, body.print-handout #stage5 > p, body.print-handout #outlineOut, body.print-handout #docxPreview, body.print-handout #handoutDocxPreview, body.print-handout #resumeBanner, body.print-handout .variant-area { display: none !important; }
+  body.print-handout .card { border: none; }
 }
+
+/* B7：讲义与变式题 */
+.handout { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 24px; margin: 16px 0; }
+.handout h4 { margin-top: 20px; }
+.handout-focus, .handout-group, .handout-mini { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px; break-inside: avoid; }
+.variant-area { background: var(--surface-subtle); border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); padding: 12px 16px; margin-top: 12px; }
+.variant-area textarea, .variant-area input { width: 100%; box-sizing: border-box; }
 button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--border-strong); }
 button.ghost:hover { background: var(--surface-muted); filter: none; }
 button.danger { background: var(--danger-bg); color: var(--danger-fg); border: 1px solid var(--error-border); }
@@ -763,6 +772,18 @@ tr.chapter-row td { font-weight: 700; background: var(--surface-subtle); }
       <p class="muted" id="docxCheckMsg" role="status"></p>
       <p><button id="docxConfirmBtn">确认下载 .docx</button>
       <button id="docxCancelBtn" class="small ghost">取消</button></p>
+    </div>
+    <h2>讲评讲义（打印上课用）</h2>
+    <p class="muted">讲义是提纲的完整版：讲什么、顺序、每道题怎么讲、典型错例、变式题。打印出来就是 A4，不用再排版；也可以存成 .docx。</p>
+    <div id="handoutOut"></div>
+    <p><button id="handoutPrintBtn">打印讲义 / 存为 PDF</button>
+    <button id="handoutDocxBtn" class="secondary">导出讲义 (.docx)</button></p>
+    <div id="handoutDocxPreview" class="hidden">
+      <h3>讲义预览（.docx，A4）</h3>
+      <div id="handoutDocxPreviewBody"></div>
+      <p class="muted" id="handoutDocxCheckMsg" role="status"></p>
+      <p><button id="handoutDocxConfirmBtn">确认下载讲义 .docx</button>
+      <button id="handoutDocxCancelBtn" class="small ghost">取消</button></p>
     </div>
     <div id="exportFallback" class="hidden">
       <p class="muted">如果下载没反应（有些浏览器或应用内预览会拦住下载），直接从下面复制：</p>
@@ -2142,7 +2163,394 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     return { ok: problems.length === 0, problems: problems, documentXml: docXml };
   }
 
-  globalThis.__wordExport = { buildWordDoc: buildWordDoc, buildDocx: buildDocx, validateDocx: validateDocx, crc32: crc32 };
+  // ---------- 讲义 .docx 导出（B7.1）：同一套 OOXML 基础设施 ----------
+  // buildHandoutDocx(handout, meta) -> { filename, mime, bytes }。
+  // handout 是 buildHandout() 的结果：考试信息 + 重点讲（每条带讲法、错题示例、
+  // 典型错法、已确认变式题）+ 错题清单 + 分组练习 + 二次过关小测 + 下次覆盖。
+  // 讲义版式：A4，宋体；只有已确认的变式题进文档，待确认的草稿不进。
+  function handoutFocusParas(f) {
+    var out = [];
+    var label = f.skill + ' 号' + (f.skillName ? ' · ' + f.skillName : '') + '知识点';
+    out.push(docxPara(label, 'Heading2'));
+    out.push(docxPara('掌握度：' + formatMastery(f.mastery)));
+    out.push(docxPara('班级得分率：' + formatAcc(f.acc)));
+    out.push(docxPara('错题示例：' + (f.topQ || '本次考试未直接考到')));
+    if (f.talk) out.push(docxPara('讲法：' + f.talk));
+    var cj = Array.isArray(f.cuojuan) ? f.cuojuan : [];
+    for (var i = 0; i < cj.length; i++) {
+      var n = cj[i] || {};
+      out.push(docxPara('典型错法（第 ' + n.q + ' 题）：' + (n.typical || '') +
+        '；错因：' + (n.cause || '未归类（待确认）')));
+    }
+    var vs = Array.isArray(f.variants) ? f.variants : [];
+    for (var j = 0; j < vs.length; j++) {
+      var v = vs[j] || {};
+      out.push(docxPara('变式题：' + (v.text || '') + (v.answer ? '（参考答案：' + v.answer + '）' : '')));
+    }
+    if (f.source) out.push(docxPara('来源：' + f.source));
+    return out;
+  }
+  function buildHandoutDocumentXml(h, meta) {
+    var hand = (h && typeof h === 'object') ? h : {};
+    var m = meta && typeof meta === 'object' ? meta : {};
+    var title = m.title ? String(m.title) : '讲评讲义';
+    var parts = [];
+    parts.push('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
+    parts.push('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>');
+    parts.push(docxPara(title, 'Title'));
+    if (m.examName) parts.push(docxPara('考试：' + m.examName));
+    if (m.className) parts.push(docxPara('班级：' + m.className));
+    if (m.date) parts.push(docxPara('日期：' + m.date));
+    if (hand.kpi) {
+      var k = hand.kpi;
+      parts.push(docxPara('本次考试：' + k.nStudents + ' 名学生，' + k.nQuestions + ' 道题，整体正确率 ' + k.fullRate + '，平均得分率 ' + k.avgRate + '。'));
+    }
+    var focus = Array.isArray(hand.focus) ? hand.focus : [];
+    parts.push(docxPara('一、本次讲什么', 'Heading1'));
+    if (!focus.length) parts.push(docxPara('本次考试没有需要重点讲的知识点。'));
+    for (var i = 0; i < focus.length; i++) parts.push.apply(parts, handoutFocusParas(focus[i]));
+    var wrong = Array.isArray(hand.wrongList) ? hand.wrongList : [];
+    parts.push(docxPara('二、错题清单', 'Heading1'));
+    if (!wrong.length) parts.push(docxPara('本次考试没有错得集中的题。'));
+    wrong.forEach(function (w) {
+      parts.push(docxPara('第 ' + w.qid + ' 题：' + w.miss + ' 人错，得分率 ' + Math.round((w.rate || 0) * 100) + '%' +
+        (w.typical ? '；典型错法：' + w.typical + '；错因：' + (w.cause || '未归类（待确认）') : '')));
+    });
+    var groups = Array.isArray(hand.groups) ? hand.groups : [];
+    parts.push(docxPara('三、分组练习', 'Heading1'));
+    if (!groups.length) parts.push(docxPara('本次考试没有分组。'));
+    groups.forEach(function (g) {
+      parts.push(docxPara(g.name + '（' + g.members.length + ' 人）', 'Heading2'));
+      parts.push(docxPara(g.advice || ''));
+      if (g.targetKcs && g.targetKcs.length) parts.push(docxPara('练这些知识点：' + g.targetKcs.join('、') + '。'));
+      if (g.redo && g.redo.length) parts.push(docxPara('重做这些题：第 ' + g.redo.join(' 题、第 ') + ' 题。'));
+      (g.variants || []).forEach(function (v) {
+        parts.push(docxPara('变式题：' + (v.text || '') + (v.answer ? '（参考答案：' + v.answer + '）' : '')));
+      });
+    });
+    var minis = Array.isArray(hand.miniTests) ? hand.miniTests : [];
+    parts.push(docxPara('四、二次过关小测', 'Heading1'));
+    if (!minis.length) parts.push(docxPara('本次考试没有需要二次过关的知识点。'));
+    minis.forEach(function (t) {
+      parts.push(docxPara(t.name + '（' + t.skill + ' 号）：共 ' + t.total + ' 道', 'Heading2'));
+      (t.items || []).forEach(function (it, j) {
+        parts.push(docxPara((j + 1) + '. [' + it.kind + '] ' + it.label));
+      });
+      if (t.note) parts.push(docxPara(t.note));
+    });
+    parts.push(docxPara('小测跑完后，把小测成绩表按正常流程上传，并在上传记录里把它记为二次过关，班级档案会显示这次弱的知识点好了没有。'));
+    var next = Array.isArray(hand.next) ? hand.next : [];
+    parts.push(docxPara('五、下次考试覆盖', 'Heading1'));
+    if (!next.length) parts.push(docxPara('本次考试没有需要下次考试覆盖的知识点。'));
+    next.forEach(function (n) {
+      parts.push(docxPara((n.skill || '') + ' 号' + (n.skillName ? ' · ' + n.skillName : '') + '知识点：这次先不讲，下次考试出题覆盖。'));
+    });
+    // A4：210mm × 297mm，上下左右边距 2.54cm（与提纲 .docx 同一套版式）。
+    parts.push('<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>');
+    parts.push('</w:body></w:document>');
+    return parts.join('');
+  }
+  function buildHandoutDocx(handout, meta) {
+    var enc = new TextEncoder();
+    var entries = [
+      { name: '[Content_Types].xml', data: enc.encode(DOCX_CONTENT_TYPES) },
+      { name: '_rels/.rels', data: enc.encode(DOCX_RELS) },
+      { name: 'word/document.xml', data: enc.encode(buildHandoutDocumentXml(handout, meta)) },
+      { name: 'word/styles.xml', data: enc.encode(DOCX_STYLES) },
+      { name: 'docProps/core.xml', data: enc.encode(docxCoreXml(meta)) },
+      { name: 'docProps/app.xml', data: enc.encode(DOCX_APP) }
+    ];
+    return {
+      filename: '讲评讲义.docx',
+      mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      bytes: zipStore(entries)
+    };
+  }
+  // 讲义下载前自检：ZIP 结构 + 四个必需文件 + 段落成对 + 讲义五节标题都在 +
+  // 每条重点讲的编号、每道已确认变式题的题干都在正文里。待确认的草稿不该出现。
+  function validateHandoutDocx(bytes, handout) {
+    var problems = [];
+    var b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+    if (b.length < 4 || b[0] !== 0x50 || b[1] !== 0x4B || b[2] !== 0x03 || b[3] !== 0x04) {
+      problems.push('文件头不是 ZIP（PK）');
+    }
+    var eocdFound = false;
+    var i;
+    for (i = b.length - 22; i >= 0 && i >= b.length - 65557; i--) {
+      if (b[i] === 0x50 && b[i + 1] === 0x4B && b[i + 2] === 0x05 && b[i + 3] === 0x06) { eocdFound = true; break; }
+    }
+    if (!eocdFound) problems.push('找不到 ZIP 结束记录');
+    var entries = readStoredEntries(b);
+    if (!entries) {
+      problems.push('ZIP 结构读不出来（只认无压缩的存储条目）');
+      return { ok: false, problems: problems, documentXml: '' };
+    }
+    ['[Content_Types].xml', '_rels/.rels', 'word/document.xml', 'word/styles.xml'].forEach(function (n) {
+      if (!entries[n]) problems.push('缺文件：' + n);
+    });
+    var docXml = '';
+    if (entries['word/document.xml']) docXml = new TextDecoder().decode(entries['word/document.xml']);
+    if (docXml) {
+      var openP = (docXml.match(/<w:p>/g) || []).length;
+      var closeP = (docXml.match(/<\/w:p>/g) || []).length;
+      if (openP === 0 || openP !== closeP) problems.push('document.xml 段落标签不成对（' + openP + '/' + closeP + '）');
+      ['一、本次讲什么', '二、错题清单', '三、分组练习', '四、二次过关小测', '五、下次考试覆盖'].forEach(function (h) {
+        if (docXml.indexOf(xmlEscape(h)) === -1) problems.push('正文里找不到“' + h + '”这一节');
+      });
+      var hand = (handout && typeof handout === 'object') ? handout : {};
+      (hand.focus || []).forEach(function (f) {
+        if (docXml.indexOf(xmlEscape(String(f.skill) + ' 号')) === -1) problems.push('正文里找不到 ' + f.skill + ' 号的重点讲条目');
+        (f.variants || []).forEach(function (v) {
+          if (v && v.text && docXml.indexOf(xmlEscape(v.text)) === -1) problems.push('正文里找不到已确认变式题：' + v.text.slice(0, 20));
+        });
+      });
+    }
+    return { ok: problems.length === 0, problems: problems, documentXml: docXml };
+  }
+
+  globalThis.__wordExport = { buildWordDoc: buildWordDoc, buildDocx: buildDocx, validateDocx: validateDocx, crc32: crc32, buildHandoutDocx: buildHandoutDocx, validateHandoutDocx: validateHandoutDocx };
+})();
+
+</script>
+<script>
+// variants.js
+// 变式题模块（B7.2）：同知识点微变式题，老师确认后才进讲义。
+// 一道变式题：{id, skill, text, answer, source, status}
+//   skill：知识点编号（旧 1–123 或高中库 1001–1999），只认库里的编号，不编；
+//   text：题干文字（老师写的，或智能生成的草稿）；answer：参考答案，可空；
+//   source：'老师写的' 或 '智能生成'；status：'draft'（待确认）或 'confirmed'（已确认）。
+//   只有 confirmed 的变式题进讲义和导出；draft 的只在变式题区里等老师确认/改/删。
+//   老师自己写的默认就是确认过的（写的人就是老师）；智能生成的默认是待确认，
+//   不经老师确认不进讲义——模型出的题对错由老师把关，产品不背书。
+// LLM 起草走老师自己填的 OpenAI 兼容接口（默认凌云 API，模型默认 deepseek-v4.1-flash，
+// 和 llm_tagger.js 同一套设置与 BYOK 口径）；调不通时只报错、不编题。
+// 纯 JS：不 import、不 require、不碰 DOM，Node 和浏览器都能直接用。
+
+(function () {
+  'use strict';
+
+  var DEFAULT_BASE_URL = 'https://api.lingyunapi.xyz/v1';
+  var DEFAULT_MODEL = 'deepseek-v4.1-flash';
+  var DEFAULT_TIMEOUT_MS = 30000;
+  var MAX_TEXT_LEN = 500;
+  var MAX_KC_PER_CALL = 5;
+
+  function isValidId(id) {
+    return typeof id === 'number' && Number.isInteger(id) &&
+      ((id >= 1 && id <= 123) || (id >= 1001 && id <= 1999));
+  }
+
+  // validateVariant(v)：题干非空（≤500 字）、知识点编号合法、来源与状态在枚举里。
+  function validateVariant(v) {
+    var problems = [];
+    if (!v || typeof v !== 'object') return { ok: false, problems: ['变式题是空的'] };
+    if (!isValidId(v.skill)) problems.push('知识点编号不对');
+    if (typeof v.text !== 'string' || !v.text.trim()) problems.push('题干是空的');
+    else if (v.text.trim().length > MAX_TEXT_LEN) problems.push('题干超过 ' + MAX_TEXT_LEN + ' 字');
+    if (v.answer !== undefined && v.answer !== null && typeof v.answer !== 'string') problems.push('参考答案不是文字');
+    if (v.source !== '老师写的' && v.source !== '智能生成') problems.push('来源不对');
+    if (v.status !== 'draft' && v.status !== 'confirmed') problems.push('状态不对');
+    return { ok: problems.length === 0, problems: problems };
+  }
+
+  function nextVariantId(list) {
+    var max = 0;
+    (list || []).forEach(function (v) { if (v && typeof v.id === 'number' && v.id > max) max = v.id; });
+    return max + 1;
+  }
+
+  // addVariant(list, v)：校验通过才进；id 自增；状态没写时按来源默认——
+  // 老师写的默认已确认，智能生成的默认待确认。
+  function addVariant(list, v) {
+    var base = Array.isArray(list) ? list.slice() : [];
+    var cand = {
+      id: nextVariantId(base),
+      skill: v && v.skill,
+      text: typeof (v && v.text) === 'string' ? v.text.trim() : '',
+      answer: typeof (v && v.answer) === 'string' ? v.answer.trim() : '',
+      source: (v && v.source) || '老师写的',
+      status: (v && v.status) || ((v && v.source) === '智能生成' ? 'draft' : 'confirmed')
+    };
+    var chk = validateVariant(cand);
+    if (!chk.ok) return { list: base, variant: null, error: chk.problems.join('；') };
+    base.push(cand);
+    return { list: base, variant: cand, error: '' };
+  }
+
+  // confirmVariant：待确认 → 已确认；已确认的再点一次还是已确认，不报错。
+  function confirmVariant(list, id) {
+    var base = Array.isArray(list) ? list.slice() : [];
+    var found = false;
+    base = base.map(function (v) {
+      if (v && v.id === id) { found = true; return { id: v.id, skill: v.skill, text: v.text, answer: v.answer, source: v.source, status: 'confirmed' }; }
+      return v;
+    });
+    return { list: base, ok: found };
+  }
+
+  // editVariant：改题干/答案；改完状态不变（待确认的改完还是待确认，要再点确认）。
+  function editVariant(list, id, text, answer) {
+    var base = Array.isArray(list) ? list.slice() : [];
+    var found = false, error = '';
+    base = base.map(function (v) {
+      if (v && v.id === id) {
+        found = true;
+        var cand = { id: v.id, skill: v.skill, text: typeof text === 'string' ? text.trim() : '', answer: typeof answer === 'string' ? answer.trim() : '', source: v.source, status: v.status };
+        var chk = validateVariant(cand);
+        if (!chk.ok) { error = chk.problems.join('；'); return v; }
+        return cand;
+      }
+      return v;
+    });
+    return { list: base, ok: found && !error, error: error };
+  }
+
+  function deleteVariant(list, id) {
+    var base = Array.isArray(list) ? list.slice() : [];
+    var before = base.length;
+    base = base.filter(function (v) { return !(v && v.id === id); });
+    return { list: base, ok: base.length < before };
+  }
+
+  // confirmedVariants：只拿已确认的；传 skill 只拿这个知识点的。
+  function confirmedVariants(list, skill) {
+    return (Array.isArray(list) ? list : []).filter(function (v) {
+      if (!v || v.status !== 'confirmed') return false;
+      if (skill !== undefined && skill !== null && v.skill !== skill) return false;
+      return true;
+    });
+  }
+
+  // buildVariantPrompt(kcList, context)：kcList [{id, name}]；context 是每知识点的
+  // 错题信息 {skill: {qid, miss, typical, cause}}，让模型照着错得最多的题微变
+  // （换数字 / 换情境），同知识点、不超纲。一次最多 5 个知识点。
+  function buildVariantPrompt(kcList, context) {
+    var list = (Array.isArray(kcList) ? kcList : []).slice(0, MAX_KC_PER_CALL);
+    var ctx = (context && typeof context === 'object') ? context : {};
+    var lines = [];
+    lines.push('你是高中数学老师，给讲评课出变式练习题。每个知识点出 1 道变式题：照着原题微变（换数字或换情境），考同一个知识点，难度和原题差不多，不超纲。');
+    lines.push('知识点与原题（编号：名称；错得最多的题）：');
+    list.forEach(function (k) {
+      var c = ctx[k.id] || {};
+      var orig = c.qid ? ('第 ' + c.qid + ' 题，' + c.miss + ' 人错' + (c.typical ? '，典型错法：' + c.typical : '') + (c.cause ? '，错因：' + c.cause : '')) : '本次没考到这道题';
+      lines.push(k.id + '：' + (k.name || '') + '；原题：' + orig);
+    });
+    lines.push('只返回 JSON 数组，不要写任何其他文字，格式：[{"skill":92,"text":"题干……","answer":"参考答案……"}]');
+    lines.push('规则：skill 必须是上面列出的编号，不能自己编；每道题都要有 text；answer 是简短的参考答案或解题要点，可以空字符串；题干 500 字以内。');
+    return lines.join('\n');
+  }
+
+  // 从模型返回里抠 JSON：先整段解析，再找 ```json 围栏，再找首尾方括号。
+  function extractJsonArray(text) {
+    if (typeof text !== 'string') return null;
+    var t = text.trim();
+    try { var v = JSON.parse(t); return Array.isArray(v) ? v : null; } catch (e) {}
+    var fenced = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenced) {
+      try { var v2 = JSON.parse(fenced[1].trim()); return Array.isArray(v2) ? v2 : null; } catch (e) {}
+    }
+    var m = t.match(/\[[\s\S]*\]/);
+    if (m) {
+      try { var v3 = JSON.parse(m[0]); return Array.isArray(v3) ? v3 : null; } catch (e) {}
+    }
+    return null;
+  }
+
+  // parseVariantResponse(text, kcList)：只认 kcList 里的编号、非空题干；
+  // 不合格的整条丢掉并记一条问题，不编、不补。
+  function parseVariantResponse(text, kcList) {
+    var ids = {};
+    (Array.isArray(kcList) ? kcList : []).forEach(function (k) { if (k && isValidId(k.id)) ids[k.id] = true; });
+    var arr = extractJsonArray(text);
+    var variants = [], problems = [];
+    if (!arr) return { variants: variants, problems: ['模型返回的不是 JSON 数组'] };
+    arr.forEach(function (raw, i) {
+      var cand = {
+        skill: raw && raw.skill,
+        text: typeof (raw && raw.text) === 'string' ? raw.text.trim() : '',
+        answer: typeof (raw && raw.answer) === 'string' ? raw.answer.trim() : '',
+        source: '智能生成',
+        status: 'draft'
+      };
+      if (!ids[cand.skill]) { problems.push('第 ' + (i + 1) + ' 条的知识点编号不在本次讲评里，已丢掉'); return; }
+      var chk = validateVariant(cand);
+      if (!chk.ok) { problems.push('第 ' + (i + 1) + ' 条不合格（' + chk.problems.join('、') + '），已丢掉'); return; }
+      variants.push(cand);
+    });
+    return { variants: variants, problems: problems };
+  }
+
+  // draftVariantsLLM(kcList, context, opts)：调一次接口起草变式题。
+  // opts: {fetchFn, baseUrl, apiKey, model, timeoutMs}
+  //   fetchFn: (url, init) => Promise<response>，response 带 ok/status/json()。
+  // 返回 Promise<{variants, errors}>：variants 都是待确认的草稿；
+  // 调不通（没填密钥、HTTP 错、超时、返回格式错）只报 errors，不编题。
+  async function draftVariantsLLM(kcList, context, opts) {
+    opts = opts || {};
+    var errors = [];
+    var list = (Array.isArray(kcList) ? kcList : []).slice(0, MAX_KC_PER_CALL);
+    if (!list.length) return { variants: [], errors: ['没有要出变式题的知识点'] };
+    var apiKey = typeof opts.apiKey === 'string' ? opts.apiKey.trim() : '';
+    if (!apiKey) return { variants: [], errors: ['没有填密钥'] };
+    var model = typeof opts.model === 'string' ? opts.model.trim() : '';
+    if (!model) return { variants: [], errors: ['没有填模型'] };
+    var baseUrl = (typeof opts.baseUrl === 'string' && opts.baseUrl.trim()) ? opts.baseUrl.trim().replace(/\/+$/, '') : DEFAULT_BASE_URL;
+    var fetchFn = opts.fetchFn;
+    if (typeof fetchFn !== 'function') return { variants: [], errors: ['这台浏览器调不通网络接口'] };
+    var timeoutMs = (typeof opts.timeoutMs === 'number' && opts.timeoutMs > 0) ? opts.timeoutMs : DEFAULT_TIMEOUT_MS;
+    function fetchWithTimeout(url, init) {
+      var timer = null;
+      var timeoutP = new Promise(function (_, reject) {
+        timer = setTimeout(function () { reject(new Error('TIMEOUT')); }, timeoutMs);
+      });
+      return Promise.race([fetchFn(url, init), timeoutP]).then(
+        function (res) { clearTimeout(timer); return res; },
+        function (e) { clearTimeout(timer); throw e; }
+      );
+    }
+    try {
+      var res = await fetchWithTimeout(baseUrl + '/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+        body: JSON.stringify({
+          model: model,
+          temperature: 0.2,
+          messages: [{ role: 'user', content: buildVariantPrompt(list, context) }]
+        })
+      });
+      if (!res || !res.ok) {
+        return { variants: [], errors: ['调用失败（HTTP ' + (res ? res.status : '无响应') + '），没生成变式题；可以先手写一道'] };
+      }
+      var data = await res.json();
+      var content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+      if (typeof content !== 'string' || !content.trim()) {
+        return { variants: [], errors: ['模型没返回文字，没生成变式题；可以先手写一道'] };
+      }
+      var parsed = parseVariantResponse(content, list);
+      parsed.problems.forEach(function (p) { errors.push(p); });
+      if (!parsed.variants.length && !errors.length) errors.push('模型没给出合用的变式题；可以先手写一道');
+      return { variants: parsed.variants, errors: errors };
+    } catch (e) {
+      if (e && e.message === 'TIMEOUT') return { variants: [], errors: ['调用超时（' + (timeoutMs / 1000) + ' 秒没回音），没生成变式题；可以先手写一道'] };
+      return { variants: [], errors: ['调用出错（' + (e.message || e) + '），没生成变式题；可以先手写一道'] };
+    }
+  }
+
+  globalThis.__variants = {
+    validateVariant: validateVariant,
+    addVariant: addVariant,
+    confirmVariant: confirmVariant,
+    editVariant: editVariant,
+    deleteVariant: deleteVariant,
+    confirmedVariants: confirmedVariants,
+    buildVariantPrompt: buildVariantPrompt,
+    parseVariantResponse: parseVariantResponse,
+    draftVariantsLLM: draftVariantsLLM,
+    DEFAULT_BASE_URL: DEFAULT_BASE_URL,
+    DEFAULT_MODEL: DEFAULT_MODEL,
+    MAX_KC_PER_CALL: MAX_KC_PER_CALL,
+    MAX_TEXT_LEN: MAX_TEXT_LEN
+  };
 })();
 
 </script>
@@ -2783,6 +3191,11 @@ function recordTeacherOverride(qid, newSkill, label) {
 }
 let cuojuan = {};       // {qid: {qid, typical, cause, skill}} 典型错卷，老师改卷时记的
 let cjUnparsed = [];   // 没解析出来的行 [{line, reason, qid}]，老师手工补或忽略，不直接丢掉
+// B7：变式题（当前这场考试的）。每条 {id, skill, text, answer, source, status}：
+// source 是“老师写的”或“智能生成”，status 是 draft（待确认）或 confirmed（已确认）。
+// 只有 confirmed 的进讲义和导出；草稿只在变式题区里等老师确认/改/删。
+// 老师自己写的默认已确认，智能生成的默认待确认；不跨考试带（换卷子就清掉）。
+let variants = [];
 let rows = [];          // {student, q, s(0-based), y}
 let diagnosis = null;
 let audit = [];
@@ -2947,7 +3360,7 @@ function saveDraft() {
   try {
     const d = {
       v: DRAFT_VERSION, savedAt: fmtDateTime(new Date()), step: currentStep, maxStep: maxStep, demo: isDemo,
-      gradebook, blankState, kcMap, tagMeta, cuojuan, cjUnparsed,
+      gradebook, blankState, kcMap, tagMeta, cuojuan, cjUnparsed, variants,
       ocrText: (document.getElementById('ocrText') || {}).value || '',
       outline: { items: window._outline || null, version: outlineVersion, history: outlineHistory, deleted: deletedItems },
     };
@@ -2987,6 +3400,7 @@ function restoreDraft() {
   tagMeta = d.tagMeta || {};
   cuojuan = d.cuojuan || {};
   cjUnparsed = d.cjUnparsed || [];
+  variants = Array.isArray(d.variants) ? d.variants : [];  // B7：旧草稿没这字段时当作空
   if (d.ocrText) { const t = document.getElementById('ocrText'); if (t) t.value = d.ocrText; }
   if (d.outline) {
     window._outline = d.outline.items;
@@ -3029,10 +3443,12 @@ function resetFlowForNewUpload() {
   isDemo = false;   // B1：换新表就不再是演示示例（演示加载时后面再置 true）
   gradebook = { students: [], questions: [] };
   blankState = { total: 0, handled: true, mode: '' };
-  kcMap = {}; tagMeta = {}; cuojuan = {}; cjUnparsed = [];
+  kcMap = {}; tagMeta = {}; cuojuan = {}; cjUnparsed = []; variants = [];
   rows = []; slotKC = {}; diagnosis = null;
   window._outline = null; outlineVersion = 1; outlineHistory = []; deletedItems = [];
   lowConfList = [];
+  const ho = document.getElementById('handoutOut'); if (ho) ho.innerHTML = '';
+  const hp = document.getElementById('handoutDocxPreview'); if (hp) hp.classList.add('hidden');
   maxStep = 1;   // UX-1：新考试从第 1 步重走，最远步回到 1
   goToStep(1, { scroll: false });
   const kcMsg = document.getElementById('kcMsg'); if (kcMsg) kcMsg.innerHTML = '';
@@ -3093,10 +3509,18 @@ function renderUploads() {
   el.innerHTML = uploads.map((u, i) => {
     const sum = u.summary ? `<br><span class="muted">${esc(u.summary)}</span>` : '';
     const view = u.outline ? ` <button class="small ghost" onclick="showUploadOutline(${i})">查看提纲</button>` : '';
+    // B7.3：二次过关——已诊断的非演示考试可以在这里记“针对上一场考试”。
+    // 候选是更早的、已诊断的、非演示的考试；第一场、演示、没诊断的都没有这个下拉框。
+    const retest = (u.kc && !u.isDemo)
+      ? ` <label class="muted">二次过关：<select id="retestSel-${i}" onchange="setRetest(${i}, this.value)">` +
+        `<option value=""${!u.retestOf ? ' selected' : ''}>不是</option>` +
+        uploads.map((p, j) => (j !== i && p.kc && !p.isDemo)
+          ? `<option value="${esc(p.time)}" data-label="${esc(p.label || '')}"${u.retestOf && u.retestOf.time === p.time ? ' selected' : ''}>针对 ${esc(p.time)} · ${esc(p.label || '')}</option>` : '').join('') +
+        `</select></label>` : '';
     const del = window._pendingDel === i
       ? ` <button class="small danger" onclick="delUpload(${i})">确认删除？</button>`
       : ` <button class="small danger" onclick="delUpload(${i})">删</button>`;
-    return `<li>${esc(u.time)} · ${esc(u.label)}：${u.nStudents} 名学生，${u.nQuestions} 道题，${u.nRows} 条作答${sum}${view}${del}</li>`;
+    return `<li>${esc(u.time)} · ${esc(u.label)}：${u.nStudents} 名学生，${u.nQuestions} 道题，${u.nRows} 条作答${sum}${view}${retest}${del}</li>`;
   }).join('');
 }
 function recordUpload(label, nStudents, nQuestions, nRows) {
@@ -3386,8 +3810,9 @@ function renderClassArchive() {
     html += `<p>已记下 ${exams.length} 次考试（只存在这台浏览器里，跟账号走；示例数据不计入）。点一次考试能看它各知识点的掌握度。</p>`;
     html += exams.map((e, i) => {
       const focusN = (e.focus || []).length;
+      const retestTag = e.retestOf ? ` · 二次过关（针对${esc(e.retestOf.label || e.retestOf.time || '')}）` : '';
       const rows = (e.kc || []).map(r => { const nm = kcNameById(r.s) || ''; return `<tr><td>${r.s} 号${nm ? ' · ' + esc(nm) : ''}</td><td>${(r.mastery * 100).toFixed(0)}%</td><td>${r.acc === null ? '—' : (r.acc * 100).toFixed(0) + '%'}</td><td>${r.n} 人次</td><td>${(e.focus || []).includes(r.s) ? '重点讲' : ''}</td></tr>`; }).join('');
-      return `<details class="archive-exam"><summary>${esc(e.time || '')} · ${esc(e.label || '考试')}：${e.nStudents} 名学生，${e.nQuestions} 道题，重点讲 ${focusN} 项</summary>` +
+      return `<details class="archive-exam"><summary>${esc(e.time || '')} · ${esc(e.label || '考试')}：${e.nStudents} 名学生，${e.nQuestions} 道题，重点讲 ${focusN} 项${retestTag}</summary>` +
         `<div class="table-scroll"><table><caption>${esc(e.label || '考试')}各知识点</caption><thead><tr><th scope="col">知识点</th><th scope="col">掌握度</th><th scope="col">得分率</th><th scope="col">考到人次</th><th scope="col">提纲</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
     }).join('');
     if (exams.length === 1) {
@@ -4618,8 +5043,8 @@ window.showOutlineVersion = function (v) {
 };
 
 // expose pure core for Node testing
-if (typeof window !== 'undefined') window.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, detectStudentCols, recognizeColumns, recognizeLongTable, recognitionSummary, recogPending, confirmRecognition, ignoreRecognition, renderRecognition, getRecognition: () => (gradebook && gradebook.recognition) || null, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, outlineLabel, outlineMasteryText, examBankPoints, nextCoverItems, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, recordTeacherOverride, getTagMeta: () => tagMeta, setTagMetaFromMap, scoreDistribution, diagnosisSummary, groupStudents, getGroupCuts: () => groupCuts, questionDiscrimination, questionFeedbackSentence, buildQuestionFeedback, buildPerQuestionReport, kcChapterById, slotForSkillId, buildKcMatrix, commonCauses, borderlineStudents, outlineSource, goToReportLayer, goToReportSource, flashRow, getReportLayer: () => reportLayer, setReportLayer: (l) => { reportLayer = l; }, outlineCutLabel, isValidOutlineCut, outlineFocusDiff, getOutlineCut: () => ({...outlineCut}), setOutlineCut, buildOutline, renderLiveFeedback, moveOutlineItem, getOutlineVersion: () => outlineVersion, getOutlineHistory: () => outlineHistory, getDeletedItems: () => deletedItems, getOutline: () => window._outline, saveDraft, restoreDraft, clearDraft, getDraft: () => readDraft(), getCurrentStep: () => currentStep, getDraftKey: () => draftKey(), getBlankState: () => ({...blankState}), getCuojuan: () => cuojuan, getUnparsedCuojuan: () => cjUnparsed, getCauses: () => effectiveCauses.slice(), getBankInfo: () => activeBankMeta(), getBankLine: () => bankLineText(), getAdminAudit: () => window.__auth.listAdminAudit(), skillIdBySlot, studentRate, examKcResults, attachExamResults, trendVerdict, buildExamTrend, normalizeStem, upsertCalibration, recordCalibration, calibrationForStem, applyCalibrations, getCalibrations: () => calibrations.slice(), loadCalibrations, saveCalibrations, renderClassArchive, loadDemoExample, computeDemoSample, renderSampleCard, refreshHeroTitle, refreshSampleState, showOutlineStep, getIsDemo: () => isDemo, hasStash, stashDraft, restoreStashedDraft, preloadDemoIfFirstVisit, goToStep, getMaxStep: () => maxStep, MODEL };
-if (typeof globalThis !== 'undefined') globalThis.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, detectStudentCols, recognizeColumns, recognizeLongTable, recognitionSummary, recogPending, confirmRecognition, ignoreRecognition, renderRecognition, getRecognition: () => (gradebook && gradebook.recognition) || null, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, outlineLabel, outlineMasteryText, examBankPoints, nextCoverItems, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, recordTeacherOverride, getTagMeta: () => tagMeta, setTagMetaFromMap, scoreDistribution, diagnosisSummary, groupStudents, getGroupCuts: () => groupCuts, questionDiscrimination, questionFeedbackSentence, buildQuestionFeedback, buildPerQuestionReport, kcChapterById, slotForSkillId, buildKcMatrix, commonCauses, borderlineStudents, outlineSource, goToReportLayer, goToReportSource, flashRow, getReportLayer: () => reportLayer, setReportLayer: (l) => { reportLayer = l; }, outlineCutLabel, isValidOutlineCut, outlineFocusDiff, getOutlineCut: () => ({...outlineCut}), setOutlineCut, buildOutline, renderLiveFeedback, moveOutlineItem, getOutlineVersion: () => outlineVersion, getOutlineHistory: () => outlineHistory, getDeletedItems: () => deletedItems, getOutline: () => window._outline, saveDraft, restoreDraft, clearDraft, getDraft: () => readDraft(), getCurrentStep: () => currentStep, getDraftKey: () => draftKey(), getBlankState: () => ({...blankState}), getCuojuan: () => cuojuan, getUnparsedCuojuan: () => cjUnparsed, getCauses: () => effectiveCauses.slice(), getBankInfo: () => activeBankMeta(), getBankLine: () => bankLineText(), getAdminAudit: () => window.__auth.listAdminAudit(), skillIdBySlot, studentRate, examKcResults, attachExamResults, trendVerdict, buildExamTrend, normalizeStem, upsertCalibration, recordCalibration, calibrationForStem, applyCalibrations, getCalibrations: () => calibrations.slice(), loadCalibrations, saveCalibrations, renderClassArchive, loadDemoExample, computeDemoSample, renderSampleCard, refreshHeroTitle, refreshSampleState, showOutlineStep, getIsDemo: () => isDemo, hasStash, stashDraft, restoreStashedDraft, preloadDemoIfFirstVisit, goToStep, getMaxStep: () => maxStep, MODEL };
+if (typeof window !== 'undefined') window.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, detectStudentCols, recognizeColumns, recognizeLongTable, recognitionSummary, recogPending, confirmRecognition, ignoreRecognition, renderRecognition, getRecognition: () => (gradebook && gradebook.recognition) || null, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, outlineLabel, outlineMasteryText, examBankPoints, nextCoverItems, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, recordTeacherOverride, getTagMeta: () => tagMeta, setTagMetaFromMap, scoreDistribution, diagnosisSummary, groupStudents, getGroupCuts: () => groupCuts, questionDiscrimination, questionFeedbackSentence, buildQuestionFeedback, buildPerQuestionReport, kcChapterById, slotForSkillId, buildKcMatrix, commonCauses, borderlineStudents, outlineSource, goToReportLayer, goToReportSource, flashRow, getReportLayer: () => reportLayer, setReportLayer: (l) => { reportLayer = l; }, outlineCutLabel, isValidOutlineCut, outlineFocusDiff, getOutlineCut: () => ({...outlineCut}), setOutlineCut, buildOutline, renderLiveFeedback, moveOutlineItem, getOutlineVersion: () => outlineVersion, getOutlineHistory: () => outlineHistory, getDeletedItems: () => deletedItems, getOutline: () => window._outline, saveDraft, restoreDraft, clearDraft, getDraft: () => readDraft(), getCurrentStep: () => currentStep, getDraftKey: () => draftKey(), getBlankState: () => ({...blankState}), getCuojuan: () => cuojuan, getUnparsedCuojuan: () => cjUnparsed, getCauses: () => effectiveCauses.slice(), getBankInfo: () => activeBankMeta(), getBankLine: () => bankLineText(), getAdminAudit: () => window.__auth.listAdminAudit(), skillIdBySlot, studentRate, examKcResults, attachExamResults, trendVerdict, buildExamTrend, normalizeStem, upsertCalibration, recordCalibration, calibrationForStem, applyCalibrations, getCalibrations: () => calibrations.slice(), loadCalibrations, saveCalibrations, renderClassArchive, loadDemoExample, computeDemoSample, renderSampleCard, refreshHeroTitle, refreshSampleState, showOutlineStep, getIsDemo: () => isDemo, hasStash, stashDraft, restoreStashedDraft, preloadDemoIfFirstVisit, goToStep, getMaxStep: () => maxStep, buildHandout, buildMiniTest, buildPracticeSheet, talkForFocus, renderHandout, prepareHandoutPrint, markRetest, getVariants: () => variants.slice(), setVariants: (v) => { variants = v; }, getUploads: () => uploads, handoutDocxPreviewHtml, MODEL };
+if (typeof globalThis !== 'undefined') globalThis.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, detectStudentCols, recognizeColumns, recognizeLongTable, recognitionSummary, recogPending, confirmRecognition, ignoreRecognition, renderRecognition, getRecognition: () => (gradebook && gradebook.recognition) || null, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, outlineLabel, outlineMasteryText, examBankPoints, nextCoverItems, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, recordTeacherOverride, getTagMeta: () => tagMeta, setTagMetaFromMap, scoreDistribution, diagnosisSummary, groupStudents, getGroupCuts: () => groupCuts, questionDiscrimination, questionFeedbackSentence, buildQuestionFeedback, buildPerQuestionReport, kcChapterById, slotForSkillId, buildKcMatrix, commonCauses, borderlineStudents, outlineSource, goToReportLayer, goToReportSource, flashRow, getReportLayer: () => reportLayer, setReportLayer: (l) => { reportLayer = l; }, outlineCutLabel, isValidOutlineCut, outlineFocusDiff, getOutlineCut: () => ({...outlineCut}), setOutlineCut, buildOutline, renderLiveFeedback, moveOutlineItem, getOutlineVersion: () => outlineVersion, getOutlineHistory: () => outlineHistory, getDeletedItems: () => deletedItems, getOutline: () => window._outline, saveDraft, restoreDraft, clearDraft, getDraft: () => readDraft(), getCurrentStep: () => currentStep, getDraftKey: () => draftKey(), getBlankState: () => ({...blankState}), getCuojuan: () => cuojuan, getUnparsedCuojuan: () => cjUnparsed, getCauses: () => effectiveCauses.slice(), getBankInfo: () => activeBankMeta(), getBankLine: () => bankLineText(), getAdminAudit: () => window.__auth.listAdminAudit(), skillIdBySlot, studentRate, examKcResults, attachExamResults, trendVerdict, buildExamTrend, normalizeStem, upsertCalibration, recordCalibration, calibrationForStem, applyCalibrations, getCalibrations: () => calibrations.slice(), loadCalibrations, saveCalibrations, renderClassArchive, loadDemoExample, computeDemoSample, renderSampleCard, refreshHeroTitle, refreshSampleState, showOutlineStep, getIsDemo: () => isDemo, hasStash, stashDraft, restoreStashedDraft, preloadDemoIfFirstVisit, goToStep, getMaxStep: () => maxStep, buildHandout, buildMiniTest, buildPracticeSheet, talkForFocus, renderHandout, prepareHandoutPrint, markRetest, getVariants: () => variants.slice(), setVariants: (v) => { variants = v; }, getUploads: () => uploads, handoutDocxPreviewHtml, MODEL };
 
 // 空白格处理状态（A3）：每张表载入时重置；老师点了批量处理才算处理完，
 // 处理完之前“确认成绩表”按钮点不动；处理记录进审计。
@@ -5809,6 +6234,7 @@ function renderOutline() {
   // A21：提纲页页脚显示本次用的 KC 库学科与版本。
   html += `<p class="muted">${bankLineText()}</p>`;
   document.getElementById('outlineOut').innerHTML = html;
+  renderHandout();  // B7：提纲每次重算，讲义跟着刷新（同一份诊断和提纲）
 }
 // B1：跳到提纲（第 5 步）：提纲按当前诊断重建，版本号回到 1。
 // 诊断还没算过时先算（样例卡“查看完整示例”直接跳过来时用）；没对应表就算不出来。
@@ -5888,8 +6314,432 @@ function buildExportItems() {
       cuojuan: cuojuanNotesForQuestions(topQEntries.map(([q]) => q)).map(n => ({ q: n.qid, typical: n.typical, cause: n.cause || '' })) };
   });
 }
-// .docx 预览的 HTML 版：和 docx 是同一份内容（标题、两组、每条的掌握度、
-// 得分率、错题示例、典型错法、建议），老师下载前先看到讲义长什么样。
+// ---------- B7：讲义与变式题 ----------
+// 讲义是提纲的完整版（打印上课用）：讲什么、顺序、每道题怎么讲、典型错例、
+// 已确认的变式题、分组练习、二次过关小测。讲义里每句话都有来源——讲法是
+// 规则生成的（错得最多的题 + 主因 + 典型错法），变式题只认老师确认过的，
+// 数字全部来自本次诊断；没数据的写“本次未考”/“还没确认变式题”，不编。
+// 变式题只属于当前这场考试（换卷子就清掉），不跨考试带。
+// 讲法句子：只用已有的数拼——概念名、错得最多的题、主因、典型错法。
+function talkForFocus(skillName, topQEntries, cj) {
+  const parts = ['先讲' + skillName + '的概念'];
+  if (topQEntries && topQEntries.length) {
+    const [q, n] = topQEntries[0];
+    parts.push('错得最多的是第 ' + q + ' 题，' + n + ' 人错');
+  }
+  if (cj && cj.length) {
+    parts.push('主因' + (cj[0].cause || '未归类（待确认）') + '，典型错法：' + (cj[0].typical || ''));
+  }
+  parts.push('讲完练一道变式');
+  return parts.join('；') + '。';
+}
+// buildHandout()：纯函数，提纲 + 诊断 + 变式题 → 讲义数据；没诊断时返回 null。
+// 错题清单按错的人数从多到少，最多 20 条（多了写清“只列前 20 条”）。
+function buildHandout() {
+  if (!diagnosis) return null;
+  const d = diagnosis;
+  const st = computeStats(rows);
+  const focus = [], next = [];
+  (window._outline || []).forEach(it => {
+    const s = it.s;
+    const hasSlot = (s !== null && s !== undefined);
+    const topQEntries = hasSlot ? Object.entries(d.missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3) : [];
+    const kc = hasSlot ? slotKC[s] : null;
+    const skill = (it.bankId !== undefined && it.bankId !== null) ? it.bankId : (kc ? kc.id : s + 1);
+    const skillName = it.bankName || (kc ? kc.name : kcNameById(skill));
+    const acc = (hasSlot && d.testedN[s]) ? d.testedC[s] / d.testedN[s] : null;
+    const cj = cuojuanNotesForQuestions(topQEntries.map(([q]) => q)).map(n => ({ q: n.qid, typical: n.typical, cause: n.cause || '' }));
+    if (it.kind === '讲') {
+      focus.push({
+        skill, skillName, mastery: it.mastery, acc,
+        topQ: topQEntries.map(([q, n]) => ({ qid: +q, miss: n })),
+        talk: talkForFocus(skillName, topQEntries, cj),
+        cuojuan: cj,
+        variants: __variants.confirmedVariants(variants, skill).map(v => ({ text: v.text, answer: v.answer || '' })),
+        source: outlineSource(it, d).text
+      });
+    } else {
+      next.push({ skill, skillName });
+    }
+  });
+  // 错题清单：每道题做过人数、没得满分的人数、平均得分率、主因与典型错法。
+  const perQ = {};
+  rows.forEach(r => {
+    const q = +r.q;  // 作答表里的题号是字符串（"10"），清单里统一用数字题号
+    if (!perQ[q]) perQ[q] = { qid: q, n: 0, miss: 0, sum: 0 };
+    perQ[q].n += 1;
+    perQ[q].sum += r.y;
+    if (r.y < 1) perQ[q].miss += 1;
+  });
+  const allWrong = Object.values(perQ).filter(x => x.miss > 0).sort((a, b) => (b.miss - a.miss) || (a.qid - b.qid));
+  const wrongList = allWrong.slice(0, 20).map(x => {
+    const cj = cuojuanNotesForQuestions([x.qid])[0];
+    return { qid: x.qid, miss: x.miss, n: x.n, rate: x.n ? x.sum / x.n : null,
+      typical: cj ? cj.typical : '', cause: cj ? (cj.cause || '') : '' };
+  });
+  return {
+    title: '讲评讲义',
+    date: new Date().toISOString().slice(0, 10),
+    kpi: { nStudents: st.nStudents, nQuestions: st.nQuestions, fullRate: (st.fullRate * 100).toFixed(1) + '%', avgRate: (st.acc * 100).toFixed(1) + '%' },
+    focus, next,
+    wrongList, wrongListTruncated: allWrong.length > 20,
+    groups: buildPracticeSheet(),
+    miniTests: focus.map(f => buildMiniTest(f.skill))
+  };
+}
+// buildMiniTest(skill, maxN)：二次过关小测——这个知识点上错得最多的原题重做 +
+// 已确认的变式题，最多 maxN 道（默认 5 道）。合用的题不够 5 道时写清只有几道，
+// 不编题；没有合用的题时 items 为空，total 为 0。
+function slotForSkill(skill) {
+  for (const key of Object.keys(slotKC || {})) {
+    if (slotKC[key] && slotKC[key].id === skill) return +key;
+  }
+  for (const s of (diagnosis ? diagnosis.order : [])) {
+    if (s + 1 === skill) return s;
+  }
+  return null;
+}
+function buildMiniTest(skill, maxN) {
+  const n = (typeof maxN === 'number' && maxN > 0) ? maxN : 5;
+  const name = kcNameById(skill) || '';
+  const items = [];
+  if (diagnosis) {
+    const s = slotForSkill(skill);
+    if (s !== null && s !== undefined) {
+      Object.entries(diagnosis.missQ[s] || {}).sort((a, b) => b[1] - a[1]).forEach(([q, cnt]) => {
+        items.push({ kind: '原题重做', label: '第 ' + q + ' 题（' + cnt + ' 人错）' });
+      });
+    }
+  }
+  __variants.confirmedVariants(variants, skill).forEach(v => {
+    items.push({ kind: '变式题', label: v.text + (v.answer ? '（参考答案：' + v.answer + '）' : '') });
+  });
+  const picked = items.slice(0, n);
+  return {
+    skill, name, items: picked, total: picked.length,
+    note: picked.length < n
+      ? '本次只有 ' + picked.length + ' 道合用的题（原题 + 已确认的变式题），不够 ' + n + ' 道，不编题。'
+      : ''
+  };
+}
+// buildPracticeSheet()：按组的针对性练习——每组：目标知识点（最弱的 5 个里
+// 这组最差的 2 个，算不出来时写清）、重做题（这组错得最多的 3 道题）、
+// 已确认的变式题。成员与分组和诊断页一致（同一份 groupStudents）。
+function buildPracticeSheet() {
+  if (!diagnosis) return [];
+  const weakTested = diagnosis.order.filter(s => diagnosis.testedN[s] >= 3).slice(0, 5);
+  if (!weakTested.length) return [];
+  const groups = groupStudents(diagnosis.perStudent, weakTested, groupCuts.low, groupCuts.high);
+  return groups.map(g => {
+    const weakIds = weakTested.map(s => skillIdBySlot(s));
+    const targetKcs = weakIds.slice(0, 2).map(id => kcNameById(id) || (id + ' 号'));
+    // 这组错得最多的题：组内学生的作答里，没得满分最多的 3 道题。
+    const memberIds = new Set(g.members.map(m => m.sid));
+    const miss = {};
+    rows.forEach(r => {
+      if (!memberIds.has(r.student)) return;
+      if (r.y < 1) miss[r.q] = (miss[r.q] || 0) + 1;
+    });
+    const redo = Object.entries(miss).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([q]) => +q);
+    const vs = [];
+    weakIds.forEach(id => {
+      __variants.confirmedVariants(variants, id).forEach(v => vs.push({ text: v.text, answer: v.answer || '' }));
+    });
+    return { name: g.name, members: g.members.map(m => m.sid), advice: g.advice, targetKcs, redo, variants: vs };
+  });
+}
+// ---------- B7.3：二次过关（小测跑完，结果回流到下次诊断） ----------
+// 记法：新考试的上传记录上写 retestOf = {time, label}——针对哪场考试的二次过关。
+// 小测成绩表按正常流程上传（新的一条上传记录），再在这里记一次“针对上一场”。
+// 校验：第一场考试不能是二次过关；演示数据不能是二次过关；不能针对自己；
+// 针对的考试必须存在、已诊断、不是演示数据。通不过时返回错误文案，不写。
+function markRetest(idx, prevTime, prevLabel) {
+  const u = uploads[idx];
+  if (!u) return { ok: false, error: '找不到这条上传记录' };
+  if (u.isDemo) return { ok: false, error: '演示数据不能记为二次过关' };
+  if (!u.kc) return { ok: false, error: '这场考试还没跑完诊断，记不了二次过关' };
+  if (!prevTime) {
+    u.retestOf = null;
+    saveUploads(); renderUploads(); renderClassArchive();
+    logAudit(`取消二次过关：${u.time} · ${u.label}`);
+    return { ok: true, error: '' };
+  }
+  if (prevTime === u.time) return { ok: false, error: '不能针对自己记二次过关' };
+  const prev = uploads.find(x => x.time === prevTime);
+  if (!prev) return { ok: false, error: '针对的考试找不到了' };
+  if (!prev.kc) return { ok: false, error: '针对的考试还没跑完诊断' };
+  if (prev.isDemo) return { ok: false, error: '不能针对演示数据记二次过关' };
+  u.retestOf = { time: prevTime, label: prevLabel || prev.label || '' };
+  saveUploads(); renderUploads(); renderClassArchive();
+  logAudit(`记为二次过关：${u.time} · ${u.label} 针对 ${prevLabel || prev.label}`);
+  return { ok: true, error: '' };
+}
+window.markRetest = markRetest;
+window.setRetest = function (idx, prevTime) {
+  const sel = document.getElementById('retestSel-' + idx);
+  const label = sel && sel.options && sel.selectedIndex >= 0 ? (sel.options[sel.selectedIndex].dataset.label || '') : '';
+  const r = markRetest(idx, prevTime, label);
+  if (!r.ok) toast(r.error);
+  return r.ok;
+};
+// ---------- 讲义渲染 + 变式题操作 ----------
+// renderHandout()：讲义区（第 5 步卡片里），提纲每次重算都跟着刷新；
+// 变式题改完也调它刷新。打印时只印讲义区（见 .print-handout 样式）。
+function renderHandout() {
+  const box = document.getElementById('handoutOut');
+  if (!box) return;
+  const h = buildHandout();
+  if (!h) { box.innerHTML = '<p class="muted">先完成诊断，讲义才能生成。</p>'; return; }
+  let html = `<div class="handout" id="handoutBody">`;
+  html += `<h3>讲评讲义</h3><p class="muted">${h.date} · ${h.kpi.nStudents} 名学生 · ${h.kpi.nQuestions} 道题 · 整体正确率 ${h.kpi.fullRate} · 平均得分率 ${h.kpi.avgRate}</p>`;
+  html += `<p><button class="small secondary" onclick="draftVariantsForExam()">智能生成变式题（重点讲的知识点）</button> <span class="muted" id="variantDraftMsg">智能生成的题是草稿，老师确认后才进讲义。</span></p>`;
+  html += `<h4>一、本次讲什么</h4>`;
+  if (!h.focus.length) html += '<p class="muted">本次考试没有需要重点讲的知识点。</p>';
+  h.focus.forEach(f => {
+    html += `<div class="handout-focus"><h5>${f.skill} 号${f.skillName ? ' · ' + esc(f.skillName) : ''}知识点</h5>` +
+      `<p>掌握度：${f.mastery === null || f.mastery === undefined ? '本次未考' : f.mastery.toFixed(2)} · 班级得分率：${f.acc === null || f.acc === undefined ? '本次考试未考' : Math.round(f.acc * 100) + '%'}</p>` +
+      `<p>错题示例：${f.topQ.length ? f.topQ.map(t => '第 ' + t.qid + ' 题（' + t.miss + ' 人错）').join('、') : '本次考试未直接考到'}</p>` +
+      `<p>讲法：${esc(f.talk)}</p>` +
+      f.cuojuan.map(n => `<p class="muted">典型错法（第 ${n.q} 题）：${esc(n.typical || '')}；错因：${esc(n.cause || '未归类（待确认）')}</p>`).join('') +
+      `<p class="muted">来源：${esc(f.source)}</p>` +
+      handoutVariantsHtml(f) + `</div>`;
+  });
+  html += `<h4>二、错题清单</h4>`;
+  if (!h.wrongList.length) html += '<p class="muted">本次考试没有错得集中的题。</p>';
+  else {
+    html += '<ol>' + h.wrongList.map(w =>
+      `<li>第 ${w.qid} 题：${w.miss} 人错（做过 ${w.n} 人），平均得分率 ${w.rate === null ? '—' : Math.round(w.rate * 100) + '%'}` +
+      (w.typical ? `；典型错法：${esc(w.typical)}；错因：${esc(w.cause || '未归类（待确认）')}` : '') + '</li>').join('') + '</ol>';
+    if (h.wrongListTruncated) html += '<p class="muted">错题多，只列了错得最多的前 20 条。</p>';
+  }
+  html += `<h4>三、分组练习</h4>`;
+  if (!h.groups.length) html += '<p class="muted">本次考试没有分组。</p>';
+  h.groups.forEach(g => {
+    html += `<div class="handout-group"><h5>${esc(g.name)}（${g.members.length} 人）</h5><p>${esc(g.advice)}</p>` +
+      (g.targetKcs.length ? `<p>练这些知识点：${g.targetKcs.map(esc).join('、')}。</p>` : '') +
+      (g.redo.length ? `<p>重做这些题：第 ${g.redo.join(' 题、第 ')} 题。</p>` : '<p class="muted">这组没有需要重做的题。</p>') +
+      (g.variants.length ? g.variants.map(v => `<p>变式题：${esc(v.text)}${v.answer ? '（参考答案：' + esc(v.answer) + '）' : ''}</p>`).join('') : '<p class="muted">还没确认变式题。</p>') + `</div>`;
+  });
+  html += `<h4>四、二次过关小测</h4>`;
+  if (!h.miniTests.length) html += '<p class="muted">本次考试没有需要二次过关的知识点。</p>';
+  h.miniTests.forEach(t => {
+    html += `<div class="handout-mini"><h5>${t.skill} 号${t.name ? ' · ' + esc(t.name) : ''}：共 ${t.total} 道</h5>` +
+      (t.items.length ? '<ol>' + t.items.map(it => `<li>[${it.kind}] ${esc(it.label)}</li>`).join('') + '</ol>' : '<p class="muted">没有合用的题。</p>') +
+      (t.note ? `<p class="muted">${esc(t.note)}</p>` : '') + `</div>`;
+  });
+  html += `<p class="muted">小测跑完后，把小测成绩表按正常流程上传，并在上传记录里把它记为二次过关，班级档案会显示这次弱的知识点好了没有。</p>`;
+  html += `<h4>五、下次考试覆盖</h4>`;
+  if (!h.next.length) html += '<p class="muted">本次考试没有需要下次考试覆盖的知识点。</p>';
+  else html += '<ul>' + h.next.map(n => `<li>${n.skill} 号${n.skillName ? ' · ' + esc(n.skillName) : ''}知识点：这次先不讲，下次考试出题覆盖。</li>`).join('') + '</ul>';
+  html += `</div>`;
+  box.innerHTML = html;
+}
+// 重点讲条目下的变式题区：已确认的直接进讲义；待确认的等老师点确认/改/删；
+// 下面是手写框和“智能生成”按钮（用老师自己填的接口设置，调不通只报错、不编题）。
+function handoutVariantsHtml(f) {
+  const all = variants.filter(v => v.skill === f.skill);
+  const confirmed = all.filter(v => v.status === 'confirmed');
+  const drafts = all.filter(v => v.status === 'draft');
+  let html = `<div class="variant-area" data-skill="${f.skill}"><h6>变式题（${f.skill} 号）</h6>`;
+  if (!confirmed.length) html += '<p class="muted">还没确认变式题。</p>';
+  confirmed.forEach(v => {
+    html += `<p>变式题：${esc(v.text)}${v.answer ? '（参考答案：' + esc(v.answer) + '）' : ''} <span class="muted">（${esc(v.source)}，已确认）</span> <button class="small ghost" onclick="deleteVariantById(${v.id})">删</button></p>`;
+  });
+  drafts.forEach(v => {
+    html += `<p>待确认：${esc(v.text)}${v.answer ? '（参考答案：' + esc(v.answer) + '）' : ''} <span class="muted">（${esc(v.source)}）</span> <button class="small secondary" onclick="confirmVariantById(${v.id})">确认</button> <button class="small ghost" onclick="editVariantById(${v.id})">改</button> <button class="small ghost" onclick="deleteVariantById(${v.id})">删</button></p>`;
+  });
+  html += `<p><textarea id="variantText-${f.skill}" rows="2" placeholder="手写一道变式题（同知识点，换数字或换情境）" aria-label="手写变式题"></textarea> ` +
+    `<input id="variantAnswer-${f.skill}" placeholder="参考答案（可空）" aria-label="参考答案"> ` +
+    `<button class="small secondary" onclick="addVariantForSkill(${f.skill})">加一道变式题</button></p>`;
+  html += `</div>`;
+  return html;
+}
+// 变式题操作（页面上的按钮都走这里；改完重画讲义 + 存草稿 + 记审计）。
+window.addVariantForSkill = function (skill) {
+  const textEl = document.getElementById('variantText-' + skill);
+  const ansEl = document.getElementById('variantAnswer-' + skill);
+  const text = textEl ? textEl.value : '';
+  const answer = ansEl ? ansEl.value : '';
+  // 正在改的那道题只认同一个知识点的框：点错区的“加”按新增算，不动正在改的那道。
+  const editing = window._editingVariantId ? variants.find(x => x.id === window._editingVariantId && x.skill === skill) : null;
+  if (editing) {
+    const r = __variants.editVariant(variants, editing.id, text, answer);
+    if (!r.ok) { toast(r.error || '这道变式题改不了'); return false; }
+    variants = r.list;
+    window._editingVariantId = null;
+    logAudit(`改变式题（${skill} 号）`);
+  } else {
+    const r = __variants.addVariant(variants, { skill, text, answer, source: '老师写的' });
+    if (!r.variant) { toast(r.error || '这道变式题加不了'); return false; }
+    variants = r.list;
+    logAudit(`加变式题（${skill} 号，已确认）`);
+  }
+  if (textEl) textEl.value = '';
+  if (ansEl) ansEl.value = '';
+  renderHandout(); saveDraft();
+  return true;
+};
+window.confirmVariantById = function (id) {
+  const r = __variants.confirmVariant(variants, id);
+  if (!r.ok) { toast('找不到这道变式题'); return false; }
+  variants = r.list;
+  logAudit(`确认变式题（${id} 号）`);
+  renderHandout(); saveDraft();
+  return true;
+};
+window.editVariantById = function (id) {
+  const v = variants.find(x => x.id === id);
+  if (!v) { toast('找不到这道变式题'); return false; }
+  const textEl = document.getElementById('variantText-' + v.skill);
+  const ansEl = document.getElementById('variantAnswer-' + v.skill);
+  if (textEl) textEl.value = v.text;
+  if (ansEl) ansEl.value = v.answer || '';
+  window._editingVariantId = id;
+  toast('改完点“加一道变式题”保存（会替换这道题）。');
+  if (textEl) textEl.focus();
+  return true;
+};
+window.deleteVariantById = function (id) {
+  const r = __variants.deleteVariant(variants, id);
+  if (!r.ok) { toast('找不到这道变式题'); return false; }
+  variants = r.list;
+  if (window._editingVariantId === id) window._editingVariantId = null;
+  logAudit(`删变式题（${id} 号）`);
+  renderHandout(); saveDraft();
+  return true;
+};
+// 智能生成变式题（B7.2）：重点讲的知识点各起草 1 道，走老师自己填的接口
+// （和智能标注同一套设置）。草稿全是待确认，老师不确认不进讲义；调不通时
+// 只报错，不编题。按钮在讲义区顶部，点一次起草全部重点讲知识点。
+window.draftVariantsForExam = async function () {
+  const h = buildHandout();
+  if (!h || !h.focus.length) { toast('没有需要重点讲的知识点，起草不了变式题。'); return false; }
+  loadLLMSettings();
+  const kcList = h.focus.map(f => ({ id: f.skill, name: f.skillName }));
+  const ctx = {};
+  h.focus.forEach(f => {
+    const top = f.topQ[0];
+    ctx[f.skill] = top ? { qid: top.qid, miss: top.miss,
+      typical: (f.cuojuan[0] || {}).typical || '', cause: (f.cuojuan[0] || {}).cause || '' } : {};
+  });
+  const msgEl = document.getElementById('variantDraftMsg');
+  if (msgEl) msgEl.textContent = '正在起草变式题……';
+  const r = await __variants.draftVariantsLLM(kcList, ctx, {
+    fetchFn: (typeof fetch === 'function') ? fetch : null,
+    baseUrl: llmSettings.baseUrl, apiKey: llmSettings.apiKey, model: llmSettings.model
+  });
+  let added = 0;
+  r.variants.forEach(dv => {
+    const res = __variants.addVariant(variants, dv);
+    if (res.variant) { variants = res.list; added += 1; }
+  });
+  const errs = r.errors || [];
+  logAudit(`智能生成变式题：起草 ${added} 道（待确认）` + (errs.length ? '，' + errs.join('；') : ''));
+  renderHandout(); saveDraft();
+  // 讲义重画会把状态行也重建：最终结果要重画之后再写，不然一重画就没了。
+  const msgEl2 = document.getElementById('variantDraftMsg');
+  if (msgEl2) msgEl2.textContent = added ? `起草了 ${added} 道变式题，都在下面等确认。` + (errs.length ? '（' + errs.join('；') + '）' : '') : (errs.join('；') || '没起草出变式题。');
+  return added > 0;
+};
+// 打印讲义 / 存为 PDF（B7.1）：不自己拼 PDF 文件——浏览器打印对话框里选
+// “另存为 PDF”就是一份真的 PDF。打印前只留讲义区（见 .print-handout 样式），
+// 印完把样式撤掉。prepareHandoutPrint() 只加样式不弹对话框，方便测试。
+function prepareHandoutPrint() {
+  const box = document.getElementById('handoutOut');
+  if (!box || !box.innerHTML.trim()) return false;
+  document.body.classList.add('print-handout');
+  return true;
+}
+window.prepareHandoutPrint = prepareHandoutPrint;
+// 印完把只印讲义的样式撤掉（afterprint 只在真浏览器里有，vm 测试沙箱里没有）。
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('afterprint', () => document.body.classList.remove('print-handout'));
+}
+document.getElementById('handoutPrintBtn').addEventListener('click', () => {
+  if (!prepareHandoutPrint()) { toast('讲义还没生成，先完成诊断。'); return; }
+  window.print();
+});
+// 讲义 .docx 导出（B7.1）：和提纲 .docx 一样的流程——先预览 + 校验，确认后才下载。
+let pendingHandoutDocx = null;
+function handoutDocxPreviewHtml(h) {
+  let html = '<h4>讲评讲义</h4>';
+  html += `<p class="muted">${h.date} · ${h.kpi.nStudents} 名学生 · ${h.kpi.nQuestions} 道题 · 整体正确率 ${h.kpi.fullRate} · 平均得分率 ${h.kpi.avgRate}</p>`;
+  html += '<h5>一、本次讲什么</h5>';
+  if (!h.focus.length) html += '<p class="muted">本次考试没有需要重点讲的知识点。</p>';
+  h.focus.forEach(f => {
+    html += `<div class="outline-item"><h4>${f.skill} 号${f.skillName ? ' · ' + esc(f.skillName) : ''}知识点</h4>` +
+      `<p>掌握度：${f.mastery === null || f.mastery === undefined ? '本次未考' : f.mastery.toFixed(2)} · 班级得分率：${f.acc === null || f.acc === undefined ? '本次考试未考' : Math.round(f.acc * 100) + '%'}</p>` +
+      `<p>错题示例：${f.topQ.length ? f.topQ.map(t => '第 ' + t.qid + ' 题（' + t.miss + ' 人错）').join('、') : '本次考试未直接考到'}</p>` +
+      `<p>讲法：${esc(f.talk)}</p>` +
+      f.cuojuan.map(n => `<p class="muted">典型错法（第 ${n.q} 题）：${esc(n.typical || '')}；错因：${esc(n.cause || '未归类（待确认）')}</p>`).join('') +
+      f.variants.map(v => `<p>变式题：${esc(v.text)}${v.answer ? '（参考答案：' + esc(v.answer) + '）' : ''}</p>`).join('') +
+      (f.source ? `<p class="muted">来源：${esc(f.source)}</p>` : '') + `</div>`;
+  });
+  html += '<h5>二、错题清单</h5>';
+  if (!h.wrongList.length) html += '<p class="muted">本次考试没有错得集中的题。</p>';
+  else html += '<ol>' + h.wrongList.map(w => `<li>第 ${w.qid} 题：${w.miss} 人错（做过 ${w.n} 人），平均得分率 ${w.rate === null ? '—' : Math.round(w.rate * 100) + '%'}` + (w.typical ? `；典型错法：${esc(w.typical)}；错因：${esc(w.cause || '未归类（待确认）')}` : '') + '</li>').join('') + '</ol>';
+  html += '<h5>三、分组练习</h5>';
+  if (!h.groups.length) html += '<p class="muted">本次考试没有分组。</p>';
+  h.groups.forEach(g => {
+    html += `<div class="outline-item"><h4>${esc(g.name)}（${g.members.length} 人）</h4><p>${esc(g.advice)}</p>` +
+      (g.targetKcs.length ? `<p>练这些知识点：${g.targetKcs.map(esc).join('、')}。</p>` : '') +
+      (g.redo.length ? `<p>重做这些题：第 ${g.redo.join(' 题、第 ')} 题。</p>` : '') +
+      g.variants.map(v => `<p>变式题：${esc(v.text)}${v.answer ? '（参考答案：' + esc(v.answer) + '）' : ''}</p>`).join('') + `</div>`;
+  });
+  html += '<h5>四、二次过关小测</h5>';
+  if (!h.miniTests.length) html += '<p class="muted">本次考试没有需要二次过关的知识点。</p>';
+  h.miniTests.forEach(t => {
+    html += `<div class="outline-item"><h4>${t.skill} 号${t.name ? ' · ' + esc(t.name) : ''}：共 ${t.total} 道</h4>` +
+      (t.items.length ? '<ol>' + t.items.map(it => `<li>[${it.kind}] ${esc(it.label)}</li>`).join('') + '</ol>' : '<p class="muted">没有合用的题。</p>') +
+      (t.note ? `<p class="muted">${esc(t.note)}</p>` : '') + `</div>`;
+  });
+  html += '<h5>五、下次考试覆盖</h5>';
+  if (!h.next.length) html += '<p class="muted">本次考试没有需要下次考试覆盖的知识点。</p>';
+  else html += '<ul>' + h.next.map(n => `<li>${n.skill} 号${n.skillName ? ' · ' + esc(n.skillName) : ''}知识点：这次先不讲，下次考试出题覆盖。</li>`).join('') + '</ul>';
+  return html;
+}
+document.getElementById('handoutDocxBtn').addEventListener('click', () => {
+  if (!window.__wordExport || !window.__wordExport.buildHandoutDocx) {
+    document.getElementById('handoutDocxCheckMsg').textContent = '讲义导出模块没加载上，请刷新页面再试。';
+    document.getElementById('handoutDocxPreview').classList.remove('hidden');
+    return;
+  }
+  const h = buildHandout();
+  if (!h) {
+    document.getElementById('handoutDocxCheckMsg').textContent = '讲义还没生成，先完成诊断。';
+    document.getElementById('handoutDocxPreview').classList.remove('hidden');
+    return;
+  }
+  const doc = window.__wordExport.buildHandoutDocx(h, { title: '讲评讲义', date: h.date });
+  const v = window.__wordExport.validateHandoutDocx(doc.bytes, h);
+  pendingHandoutDocx = doc;
+  document.getElementById('handoutDocxPreviewBody').innerHTML = handoutDocxPreviewHtml(h);
+  document.getElementById('handoutDocxCheckMsg').textContent = v.ok
+    ? `已校验：文件格式正确，内容与页面一致（重点讲 ${h.focus.length} 项，错题 ${h.wrongList.length} 条）。点“确认下载”拿 .docx。`
+    : '校验没通过：' + v.problems.join('；') + '。先别下载，请把这句话告诉管理员。';
+  document.getElementById('handoutDocxConfirmBtn').disabled = !v.ok;
+  document.getElementById('handoutDocxPreview').classList.remove('hidden');
+  logAudit('导出讲义（.docx）预览已生成' + (v.ok ? '，校验通过' : '，校验没通过'));
+});
+document.getElementById('handoutDocxConfirmBtn').addEventListener('click', () => {
+  if (!pendingHandoutDocx) return;
+  const blob = new Blob([pendingHandoutDocx.bytes], { type: pendingHandoutDocx.mime });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = pendingHandoutDocx.filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  document.getElementById('handoutDocxPreview').classList.add('hidden');
+  pendingHandoutDocx = null;
+  logAudit('导出讲义（Word .docx）');
+  toast('讲义已导出（.docx）');
+});
+document.getElementById('handoutDocxCancelBtn').addEventListener('click', () => {
+  document.getElementById('handoutDocxPreview').classList.add('hidden');
+  pendingHandoutDocx = null;
+});
+
 function docxPreviewHtml(items) {
   let html = '<h4>讲评提纲</h4>';
   const focus = (items || []).filter(i => i.kind !== '下次覆盖');
