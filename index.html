@@ -268,7 +268,12 @@ main { max-width: 1080px; margin: 0 auto; padding: 20px 16px 60px; }
 .shell { display: flex; gap: 20px; align-items: flex-start; }
 .work { flex: 1; min-width: 0; }
 .steps { flex: 0 0 200px; display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; background: transparent; border: 0; box-shadow: none; position: sticky; top: 12px; }
-.step { position: relative; background: var(--tab-tint); color: var(--tab-tint-fg); border: 0; border-radius: var(--radius-md); padding: 12px 14px; font-size: var(--text-body); font-weight: 600; letter-spacing: -0.1px; transition: margin 90ms steps(2, end), box-shadow 90ms steps(2, end); }
+.step { position: relative; background: var(--tab-tint); color: var(--tab-tint-fg); border: 0; border-radius: var(--radius-md); padding: 12px 14px; font-size: var(--text-body); font-weight: 600; letter-spacing: -0.1px; transition: margin 90ms steps(2, end), box-shadow 90ms steps(2, end); cursor: pointer; }
+/* UX-1：没做过的步点不动（置灰、默认光标）；已完成步和当前步可点。 */
+.step.locked { opacity: .55; cursor: default; }
+/* UX-1：回看已完成步时，卡片底下的轻提示 + 直接去下一步。 */
+.next-hint { margin-top: 16px; padding: 12px 16px; background: var(--surface-subtle); border-radius: var(--radius-md); }
+.next-hint button { margin-left: 8px; }
 .step[data-s="1"] { --tab: var(--s1); --tab-fg: var(--s1-fg); --tab-tint: var(--s1-tint-bg); --tab-tint-fg: var(--s1-tint-fg); }
 .step[data-s="2"] { --tab: var(--s2); --tab-fg: var(--s2-fg); --tab-tint: var(--s2-tint-bg); --tab-tint-fg: var(--s2-tint-fg); }
 .step[data-s="3"] { --tab: var(--s3); --tab-fg: var(--s3-fg); --tab-tint: var(--s3-tint-bg); --tab-tint-fg: var(--s3-tint-fg); }
@@ -279,7 +284,7 @@ main { max-width: 1080px; margin: 0 auto; padding: 20px 16px 60px; }
 .step-sub { display: none; }
 .step.active { background: var(--tab); color: var(--tab-fg); margin-right: -12px; padding-right: 26px; box-shadow: 0 0 0 2px var(--fg), var(--shadow-card); }
 .step.done::after { content: ""; position: absolute; right: 12px; top: 50%; width: 9px; height: 5px; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-70%) rotate(-45deg); }
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 28px 32px; margin-bottom: 16px; box-shadow: var(--shadow-sm); animation: fadeIn 90ms steps(2, end); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 28px 32px; margin-bottom: 16px; box-shadow: var(--shadow-sm); animation: fadeIn 90ms steps(2, end); scroll-margin-top: 90px; }
 .card h2 { margin: 0 0 10px; font-family: var(--font-display); font-size: var(--text-h2); font-weight: 700; letter-spacing: 0.01em; line-height: var(--leading-tight); }
 .card h3 { margin: 20px 0 8px; font-size: var(--text-h3); font-weight: 600; letter-spacing: -0.2px; }
 .muted { color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-body); }
@@ -333,7 +338,7 @@ input[type=file]::file-selector-button { background: var(--surface-muted); color
 @media print {
   @page { size: A4; margin: 15mm; }
   body { background: #fff; color: #000; font-size: 12pt; }
-  header, .steps, .progress, .toast, button, input, .dropzone, #exportFallback, .density-btn, #auditCard, .site-nav, .site-footer, #authCard, #adminCard, .sample-card, .flow3, .pricing { display: none !important; }
+  header, .steps, .progress, .toast, button, input, .dropzone, #exportFallback, .density-btn, #auditCard, .site-nav, .site-footer, #authCard, #adminCard, .sample-card, .flow3, .pricing, .trust-card { display: none !important; }
   main { max-width: 100%; padding: 0; }
   .card { box-shadow: none; border: 1px solid #ccc; border-radius: 0; break-inside: avoid; margin-bottom: 12px; animation: none; }
   .outline-item { break-inside: avoid; }
@@ -346,9 +351,13 @@ button.danger { background: var(--danger-bg); color: var(--danger-fg); border: 1
 button.danger:hover { background: var(--danger-bg); filter: brightness(0.97); }
 button.loading { pointer-events: none; opacity: 0.7; }
 button.loading::before { content: ''; display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border-strong); border-top-color: currentColor; border-radius: 50%; vertical-align: -1px; margin-right: 6px; animation: spin 0.8s linear infinite; }
-.dropzone { border: 1.5px dashed var(--border-strong); border-radius: var(--radius-lg); padding: 16px; background: var(--surface-subtle); transition: border-color 90ms steps(2, end), background 90ms steps(2, end); cursor: pointer; }
+.dropzone { border: 1.5px dashed var(--border-strong); border-radius: var(--radius-lg); padding: 16px; background: var(--surface-subtle); transition: border-color 90ms steps(2, end), background 90ms steps(2, end); cursor: pointer; position: relative; }
 .dropzone.over { border-color: var(--step); background: var(--surface-subtle); }
 .dropzone span { display: block; margin-top: 8px; font-size: var(--text-sm); color: var(--muted); }
+/* UX-2：原生文件框 visually 藏起来，只留中文按钮；按钮本身也要能点，不触发拖放区二次点击。 */
+.dropzone input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.file-input-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.drop-pick { margin-top: 12px; }
 th.num, td.num { text-align: right; }
 tbody tr:hover { background: var(--surface-subtle); }
 body.density-compact th, body.density-compact td { padding: 6px 8px; }
@@ -385,7 +394,8 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
 }
 @media (max-width: 640px) {
   .shell { display: block; }
-  .steps { position: static; flex-direction: row; flex: none; margin-bottom: 16px; overflow-x: auto; }
+  /* UX-1：手机上步骤条同样常驻顶部（横向可滚），往下走流程时随时能看到走到第几步。 */
+  .steps { position: sticky; top: 0; z-index: 20; background: var(--bg); flex-direction: row; flex: none; margin-bottom: 16px; overflow-x: auto; padding: 8px 0; }
   .step { flex: 1; min-width: 0; font-size: var(--text-xs); padding: 8px; }
   .step.active { margin-right: 0; padding-right: 8px; }
   .step.done::after { display: none; }
@@ -412,11 +422,13 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
 .user-chip.hidden, .field-grid.hidden { display: none; }
 .site-footer { border-top: 1px solid var(--border-strong); padding: 32px 24px 24px; background: var(--surface); }
 .footer-cols { max-width: 1080px; margin: 0 auto 20px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
-.footer-col h3 { margin: 0 0 10px; font-size: var(--text-sm); font-weight: 700; }
+/* UX-3：页脚栏目标题不换行（“关于我们”四个字一行），栏内容不撑宽。 */
+.footer-col { min-width: 0; }
+.footer-col h3 { margin: 0 0 10px; font-size: var(--text-sm); font-weight: 700; white-space: nowrap; }
 .footer-col p { margin: 4px 0; font-size: var(--text-sm); line-height: var(--leading-body); color: var(--muted); }
 .footer-col ul { margin: 4px 0; padding-left: 18px; font-size: var(--text-sm); color: var(--muted); }
-.footer-col a { color: var(--fg); }
-.footer-bottom { max-width: 1080px; margin: 0 auto; display: flex; gap: 16px; align-items: center; justify-content: space-between; font-size: var(--text-xs); color: var(--muted); border-top: 1px solid var(--border-subtle); padding-top: 16px; }
+.footer-col a { color: var(--fg); overflow-wrap: anywhere; }
+.footer-bottom { max-width: 1080px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; font-size: var(--text-xs); color: var(--muted); border-top: 1px solid var(--border-subtle); padding-top: 16px; }
 .footer-bottom a { color: var(--muted); }
 .auth-tabs { display: flex; gap: 4px; margin-bottom: 14px; }
 .auth-tabs button { min-height: 36px; padding: 0 16px; background: transparent; color: var(--muted); border: 1px solid var(--border-strong); }
@@ -448,7 +460,10 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
 .nav-brand { font-weight: 700; font-size: var(--text-sm); }
 .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0 8px; }
 .hero-note { font-size: var(--text-sm); color: var(--muted); margin: 0 0 4px; }
-.sample-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 28px 32px; margin: 24px 0; box-shadow: var(--shadow-sm); }
+.sample-card, .trust-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 28px 32px; margin: 24px 0; box-shadow: var(--shadow-sm); }
+.trust-card ul { margin: 6px 0 18px; padding-left: 20px; }
+.trust-card li { margin: 5px 0; line-height: var(--leading-body); }
+.trust-note { background: var(--info-bg); border: 1px solid var(--info-border); color: var(--info-fg); border-radius: var(--radius-lg); padding: 12px 14px; font-size: var(--text-sm); line-height: var(--leading-body); margin: 10px 0; }
 .sample-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .sample-head h2 { margin: 0; }
 .sample-badge { display: inline-block; font-size: var(--text-sm); font-weight: 700; border: 1px solid var(--border-strong); border-radius: var(--radius-full); padding: 2px 10px; }
@@ -472,6 +487,18 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
   .sample-card { padding: 20px; }
   .hero-actions { gap: 8px; }
 }
+
+/* B2：导入三步指示条 + 识别表横向滚动（手机上表不撑宽页面） */
+.import-steps { display: flex; gap: 8px; list-style: none; margin: 12px 0; padding: 0; flex-wrap: wrap; }
+.import-steps li { flex: 1; min-width: 150px; background: var(--surface-subtle); color: var(--muted); border-radius: var(--radius-md); padding: 8px 10px; font-size: var(--text-xs); }
+.import-steps li.active { background: var(--step); color: var(--step-fg); font-weight: 600; }
+.table-scroll { overflow-x: auto; }
+.cut-box { background: var(--surface-subtle); border-radius: var(--radius-md); padding: 12px 14px; margin: 12px 0; }
+.cut-box h3 { margin-top: 0; }
+/* B4 三层报告：层切换条、矩阵章节行、回原数据时闪一下 */
+.layer-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+tr.chapter-row td { font-weight: 700; background: var(--surface-subtle); }
+.flash { outline: 3px solid var(--warning-fg); outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -481,7 +508,7 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
     <div class="nav-links">
       <a href="#top">首页</a>
       <a href="#sampleCard">示例</a>
-      <a href="#stage1">功能</a>
+      <a href="#stage1" id="navFuncLink">功能</a>
       <a href="#siteFooter">联系作者</a>
     </div></div>
     <div class="nav-right">
@@ -531,13 +558,38 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
     <h2>价格</h2>
     <div class="price-card"><p class="price-now">现阶段全部免费</p><p>统计、诊断、讲评提纲、导出这些核心功能不收费。订阅价等真实验证后再定，不写死数字。</p></div>
   </section>
+  <!-- 信任设计（B5）：“教师是最终裁决者”写进页面。原则 + 不声称 + 可信度信号。 -->
+  <section class="trust-card" id="trustCard" aria-label="教师是最终裁决者">
+    <h2>教师是最终裁决者</h2>
+    <p>这个产品是给老师用的，不是替老师做主的。下面三条写在页面上，也写进每一步里：</p>
+    <h3>原则</h3>
+    <ul>
+      <li>每步确认：每步跑完停下来等老师确认，确认完再往下走。</li>
+      <li>都能改：机器标的知识点、算的掌握度、拟的提纲，老师都能改；改完流水线按改完的结果走。</li>
+      <li>有留档：机器原来标的什么、老师改成什么，诊断页“查看来源”和页面底部的操作记录里都能查到。</li>
+    </ul>
+    <h3>我们不声称什么</h3>
+    <ul>
+      <li>不编准确率：页面上不写“标注准确率百分之几”。标注只在一张 2024 年新高考 I 卷上量过一次：16 道题里 15 道与人工一致，剩下 1 道置信度低，进了老师确认清单。一张卷子说明不了一切。</li>
+      <li>不替代教师判断：诊断和提纲是机器拟的参考，讲什么、怎么讲，老师定。</li>
+      <li>不报告干预效果：还没量过“用了提纲，学生下次考得怎么样”，不声称。</li>
+      <li>缺失就是缺失：空白格按缺考处理，不写 0；没考到的知识点写“本次未考”，不编数字。</li>
+    </ul>
+    <h3>为什么可以信</h3>
+    <ul>
+      <li>示例数据当场跑：上面样例卡就是真算出来的结果，点“查看完整示例”能在工具里走一遍。</li>
+      <li>导出先预览再下载：Word 导出先出预览和校验，确认后才下载。</li>
+      <li>数据不出这台电脑：成绩表、诊断、提纲都只存在这台浏览器里，不发服务器。</li>
+      <li>提纲每个字都能改：顺序能拖、条目能删能改，改完旧版留着能查。</li>
+    </ul>
+  </section>
   <div class="shell">
   <div class="steps" id="stepper">
-    <div class="step" data-s="1"><b>第 1 步</b><span class="step-name">上传成绩表</span><span class="step-sub">成绩表 · 粘贴</span></div>
-    <div class="step" data-s="2"><b>第 2 步</b><span class="step-name">试卷处理</span><span class="step-sub">OCR · 标注</span></div>
-    <div class="step" data-s="3"><b>第 3 步</b><span class="step-name">统计</span><span class="step-sub">正确率 · 分层</span></div>
-    <div class="step" data-s="4"><b>第 4 步</b><span class="step-name">诊断</span><span class="step-sub">知识点掌握度</span></div>
-    <div class="step" data-s="5"><b>第 5 步</b><span class="step-name">讲评提纲</span><span class="step-sub">重点讲 · 导出</span></div>
+    <div class="step" data-s="1" tabindex="0" role="button" aria-label="第 1 步：上传成绩表"><b>第 1 步</b><span class="step-name">上传成绩表</span><span class="step-sub">成绩表 · 粘贴</span></div>
+    <div class="step" data-s="2" tabindex="0" role="button" aria-label="第 2 步：试卷处理"><b>第 2 步</b><span class="step-name">试卷处理</span><span class="step-sub">OCR · 标注</span></div>
+    <div class="step" data-s="3" tabindex="0" role="button" aria-label="第 3 步：统计"><b>第 3 步</b><span class="step-name">统计</span><span class="step-sub">正确率 · 分层</span></div>
+    <div class="step" data-s="4" tabindex="0" role="button" aria-label="第 4 步：诊断"><b>第 4 步</b><span class="step-name">诊断</span><span class="step-sub">知识点掌握度</span></div>
+    <div class="step" data-s="5" tabindex="0" role="button" aria-label="第 5 步：讲评提纲"><b>第 5 步</b><span class="step-name">讲评提纲</span><span class="step-sub">重点讲 · 导出</span></div>
   </div>
   <div class="work">
   <div class="progress" id="stepProgress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="完成进度"><i></i></div>
@@ -552,7 +604,7 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
         <button id="authTabRegister" type="button">注册</button>
       </div>
       <div class="field-grid">
-        <label>邮箱<input type="email" id="authEmail" autocomplete="username" placeholder="老师邮箱，如 teacher@school.cn"></label>
+        <label>邮箱<input type="email" id="authEmail" autocomplete="username" placeholder="老师邮箱，如 li@school.cn"></label>
         <label>密码<input type="password" id="authPassword" autocomplete="current-password" placeholder="至少 6 位"></label>
       </div>
       <div class="field-grid hidden" id="authConfirmRow">
@@ -618,7 +670,8 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
   <div class="card" id="stage1">
     <h2>第 1 步 · 上传成绩表</h2>
     <p class="muted">宽表，老师登分用的样子：第一列学号，第二列姓名，之后每列一道题，列名写成“第 N 题（X 分）”标明满分；最后一列总分可有可无。支持 Excel（.xlsx）和 CSV。得分按比例进诊断：得 4/5 分算 0.8，满分算对，0 分算错；空白格不算 0 分。</p>
-    <div class="dropzone" id="gradeDrop" aria-label="上传成绩表：把文件拖到这里，或按回车点选文件"><input type="file" id="gradeFile" accept=".csv,.xlsx,.xls" aria-label="上传成绩表"><span>把成绩表拖到这里，或点选文件</span></div>
+    <ol class="import-steps" id="importSteps"><li data-step="upload" class="active">① 上传后自动识别</li><li data-step="confirm">② 只确认拿不准的几项</li><li data-step="fix">③ 认不出来按提示改表重传</li></ol>
+    <div class="dropzone" id="gradeDrop" aria-label="上传成绩表：把文件拖到这里，或按回车点选文件"><input type="file" id="gradeFile" accept=".csv,.xlsx,.xls" aria-label="上传成绩表"><span>把成绩表拖到这里，或点选文件</span><span>支持 Excel（.xlsx）和 CSV</span><button type="button" class="secondary drop-pick" id="gradePickBtn">点选成绩表文件</button><span class="muted drop-file" id="gradeFileName"></span></div>
     <p><button id="demoBtn" class="secondary">加载模拟数据（30 名学生 × 10 道题，模拟成绩表 + 对应表）</button></p>
     <h3>或者：从 Excel 粘贴</h3>
     <p class="muted">从 Excel 里复制成绩表（Ctrl+C），粘贴到下面，点“解析粘贴内容”。支持宽表和长表；列名写成“第 N 题（5 分）”最稳妥，只写“第 N 题”也能认，满分按本列最高分推断。列名对应关系会记下来，下次粘贴同一张表不用再认。</p>
@@ -632,18 +685,19 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
     <div id="issuesOut"></div>
     <div id="fullMarksOut"></div>
     <p><button id="toStage2" disabled>确认成绩表，进入试卷处理</button></p>
+    <p class="next-hint hidden" id="nextHint1">这一步已确认。<button type="button" class="small secondary" data-goto="2">直接去下一步</button></p>
   </div>
 
   <div class="card hidden" id="stage2">
     <h2>第 2 步 · 试卷处理</h2>
     <p class="muted">诊断要知道每道题考哪个知识点。两个办法：直接上传题目与知识点对应表（题号、题型、满分、知识点编号），或者传试卷图片走 OCR，认出文字后再按题号拆题、逐题确认知识点。</p>
     <h3>办法一：上传对应表</h3>
-    <p><input type="file" id="kcFile" accept=".csv"></p>
+    <p><input type="file" id="kcFile" accept=".csv" class="file-input-hidden" aria-label="上传题目与知识点对应表"><button type="button" class="secondary" id="kcPickBtn">点选对应表文件</button> <span id="kcFileName" class="muted"></span></p>
     <div id="kcMsg" class="muted"></div>
     <p id="bankInfoLine" class="muted"></p>
     <h3>办法二：试卷 OCR（PaddleOCR，备用 Tesseract.js）</h3>
     <p id="ocrLimits" class="muted">OCR 能读印刷体的题目文字、题号和分数；手写的答案、公式图片、看图做的题干读不了，公式和图形是已知短板；读不出来就跳过 OCR，直接上传题目与知识点对应表，或者从知识点库里点选。</p>
-    <div class="dropzone" id="paperDrop" aria-label="上传试卷图片：把文件拖到这里，或按回车点选文件"><input type="file" id="paperFile" accept="image/*,.pdf" aria-label="上传试卷图片"><span>把试卷图片拖到这里，或点选文件</span></div>
+    <div class="dropzone" id="paperDrop" aria-label="上传试卷图片：把文件拖到这里，或按回车点选文件"><input type="file" id="paperFile" accept="image/*,.pdf" aria-label="上传试卷图片"><span>把试卷图片拖到这里，或点选文件</span><span>图片直接识别；PDF 请先转成图片</span><button type="button" class="secondary drop-pick" id="paperPickBtn">点选试卷图片</button><span class="muted drop-file" id="paperFileName"></span></div>
     <p><button id="ocrBtn" class="secondary" disabled>开始识别</button>
     <span id="ocrStatus" class="muted"></span></p>
     <div id="ocrOut" class="hidden">
@@ -652,14 +706,17 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
       <p><button id="splitBtn" class="secondary">按题号拆题</button></p>
       <div id="splitOut"></div>
     </div>
+    <h3>每题即时结论（改映射马上变）</h3>
+    <p class="muted">下面这张表不用等整轮跑完：成绩表和对应表一确认，每道题的通过率、区分度雏形和一句话结论就出来了；拆题表里改一处知识点编号，或者低置信度清单里换一个知识点，这里马上跟着变。区分度是雏形：总分前三分之一与后三分之一的满分率之差，越大说明这道题越能分出好学生和差学生，接近 0 说明大家错得差不多。</p>
+    <div id="liveFeedbackOut"></div>
     <h3>典型错卷（可选）</h3>
     <p class="muted">改卷时随手记的典型错卷和错因，记进来，诊断和提纲里会用上。两种办法：下面直接加一条，或者把改卷笔记粘贴进来按行解析。不记也不影响后面的步骤。</p>
     <p><label>题号 <input type="number" id="cjQid" min="1" style="width:70px" aria-label="典型错卷题号"></label>
     <label>典型错法 <input type="text" id="cjTypical" style="width:220px" placeholder="例如：把长轴当作焦距" aria-label="典型错法"></label>
     <label>错因 <select id="cjCause" aria-label="错因分类"></select></label>
     <button id="cjAddBtn" class="secondary">加一条典型错卷</button></p>
-    <p class="muted">或者：粘贴改卷笔记，每行一条（例如“Q9 一半人把定义域漏了，概念不清”），点“解析笔记”自动拆成题号、典型错法和错因；归不上类的会标出来，等老师逐条确认。</p>
-    <textarea id="cjBox" aria-label="粘贴改卷笔记" placeholder="Q9 一半人把定义域漏了，概念不清"></textarea>
+    <p class="muted">或者：粘贴改卷笔记，每行一条（例如“第 9 题一半人把定义域漏了，概念不清”），点“解析笔记”自动拆成题号、典型错法和错因；归不上类的会标出来，等老师逐条确认。</p>
+    <textarea id="cjBox" aria-label="粘贴改卷笔记" placeholder="第 9 题一半人把定义域漏了，概念不清"></textarea>
     <p><button id="cjParseBtn" class="secondary">解析笔记</button> <span id="cjMsg" class="muted"></span></p>
     <div id="cjList"></div>
     <div id="cjUnparsed"></div>
@@ -668,6 +725,7 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
     <div id="causeSettings"></div>
     <p><button id="causeSaveBtn" class="secondary">保存错因分类</button> <button id="causeResetBtn" class="small ghost">恢复默认五类</button> <span id="causeMsg" class="muted"></span></p>
     <p><button id="toStage3" disabled>确认试卷，进入统计</button></p>
+    <p class="next-hint hidden" id="nextHint2">这一步已确认。<button type="button" class="small secondary" data-goto="3">直接去下一步</button></p>
   </div>
 
   <div class="card hidden" id="stage3">
@@ -675,6 +733,7 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
     <p><button id="densityBtn3" class="small secondary density-btn">切换紧凑密度</button></p>
     <div id="statsOut"></div>
     <p><button id="toStage4">确认统计，进入诊断</button></p>
+    <p class="next-hint hidden" id="nextHint3">这一步已确认。<button type="button" class="small secondary" data-goto="4">直接去下一步</button></p>
   </div>
 
   <div class="card hidden" id="stage4">
@@ -683,6 +742,7 @@ body.density-compact th, body.density-compact td { padding: 6px 8px; }
     <p><button id="densityBtn4" class="small secondary density-btn">切换紧凑密度</button></p>
     <div id="diagOut"></div>
     <p><button id="toStage5">确认诊断，进入讲评提纲</button></p>
+    <p class="next-hint hidden" id="nextHint4">这一步已确认。<button type="button" class="small secondary" data-goto="5">直接去下一步</button></p>
   </div>
 
   <div class="card hidden" id="stage5">
@@ -1270,7 +1330,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     }
     var apiKey = typeof opts.apiKey === 'string' ? opts.apiKey.trim() : '';
     if (!apiKey) {
-      return { tagged: questions.map(function (q) { return { qid: q.qid, ranked: [] }; }), errors: ['没有填 API Key'] };
+      return { tagged: questions.map(function (q) { return { qid: q.qid, ranked: [] }; }), errors: ['没有填密钥'] };
     }
     var model = typeof opts.model === 'string' ? opts.model.trim() : '';
     if (!model) {
@@ -1753,6 +1813,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       parts.push('<p>典型错法（第 ' + escapeHtml(n.q) + ' 题）：' + escapeHtml(n.typical || '') +
         '；错因：' + escapeHtml(n.cause || '未归类（待确认）') + '</p>');
     }
+    // B4.4 来源：有就写一行，没有就不写，老的导出内容不受影响。
+    if (item && typeof item.source === 'string' && item.source) parts.push('<p>来源：' + escapeHtml(item.source) + '</p>');
     parts.push('<p>' + escapeHtml(adviceFor(kind)) + '</p>');
     return parts.join('\n');
   }
@@ -1920,6 +1982,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       out.push(docxPara('典型错法（第 ' + n.q + ' 题）：' + (n.typical || '') +
         '；错因：' + (n.cause || '未归类（待确认）')));
     }
+    // B4.4 来源：有就写一行，没有就不写，老的导出内容不受影响。
+    if (item && typeof item.source === 'string' && item.source) out.push(docxPara('来源：' + item.source));
     out.push(docxPara(adviceFor(item && item.kind)));
     return out;
   }
@@ -2679,8 +2743,34 @@ let tagMeta = {};
 // 对应关系从表里来（对应表 CSV、长表、模板、演示数据）：来源记“对应表”。
 function setTagMetaFromMap(map, source) {
   Object.keys(map || {}).forEach(qid => {
-    tagMeta[qid] = { skill: map[qid], source: source || '对应表', confidence: null };
+    const prev = tagMeta[qid];
+    const next = { skill: map[qid], source: source || '对应表', confidence: null };
+    // B5：老师传自己的对应表，盖掉机器标的——机器的原判也留下来。
+    if (prev && (prev.source === 'LLM' || prev.source === '关键词') && prev.skill !== null && prev.skill !== undefined) {
+      next.original = prev.original || { skill: prev.skill, source: prev.source,
+        confidence: (prev.confidence === undefined || prev.confidence === null) ? null : prev.confidence };
+    } else if (prev && prev.original) {
+      next.original = prev.original;
+    }
+    tagMeta[qid] = next;
   });
+}
+// B5：AI 原判保留——老师改一道题的知识点时，机器原来标的（来源 + 编号 +
+// 置信度）留在 tagMeta[qid].original 里，诊断页“查看来源”里能看到；草稿
+// 里 tagMeta 整份存，original 跟着存，刷新还在。只保留机器标的原判
+// （LLM / 关键词）；对应表本来就是老师给的，改了不留原判。改两次时原判
+// 还是第一次机器标的那个，不拿第二次的覆盖。
+function recordTeacherOverride(qid, newSkill, label) {
+  const prev = tagMeta[qid];
+  let original = prev && prev.original ? prev.original : null;
+  if (!original && prev && (prev.source === 'LLM' || prev.source === '关键词') &&
+      prev.skill !== null && prev.skill !== undefined) {
+    original = { skill: prev.skill, source: prev.source,
+      confidence: (prev.confidence === undefined || prev.confidence === null) ? null : prev.confidence };
+  }
+  tagMeta[qid] = { skill: newSkill, source: label, confidence: null };
+  if (original) tagMeta[qid].original = original;
+  return tagMeta[qid];
 }
 let cuojuan = {};       // {qid: {qid, typical, cause, skill}} 典型错卷，老师改卷时记的
 let cjUnparsed = [];   // 没解析出来的行 [{line, reason, qid}]，老师手工补或忽略，不直接丢掉
@@ -2689,12 +2779,15 @@ let diagnosis = null;
 let audit = [];
 
 let currentStep = 1;
+let maxStep = 1;   // UX-1：走到过最远的一步。点步骤条只能回到已完成步，不能跳去没做过的步。
 function setStep(n) {
   currentStep = n;
   document.querySelectorAll('#stepper .step').forEach(el => {
     const s = +el.dataset.s;
     el.classList.toggle('done', s < n);
     el.classList.toggle('active', s === n);
+    el.classList.toggle('locked', s > maxStep);
+    if (el.setAttribute) el.setAttribute('aria-disabled', s > maxStep ? 'true' : 'false');
   });
   document.body.dataset.step = String(n);
   const prog = document.getElementById('stepProgress');
@@ -2705,6 +2798,122 @@ function setStep(n) {
   }
 }
 function show(id) { document.getElementById(id).classList.remove('hidden'); }
+// UX-1 分步呈现：一次只显示当前步的卡片，其余步收起不占高度；点确认后自动滑到下一步。
+// 回跳已完成步时，按现有数据把那一步的内容补算出来（第 3 步统计、第 4 步诊断、第 5 步提纲），
+// 不丢数据；跳去没做过的步拒绝（返回 false），不弹框。
+function ensureStepRendered(n) {
+  if (n === 3 && gradebook && gradebook.students && gradebook.students.length) {
+    if (!rows.length && kcMap && Object.keys(kcMap).length) {
+      const norm = normalizeToLong(gradebook, kcMap);
+      rows = norm.rows; slotKC = norm.slotMap || {};
+    }
+    if (rows.length) {
+      const norm = (kcMap && Object.keys(kcMap).length) ? normalizeToLong(gradebook, kcMap) : null;
+      renderStats(computeStats(rows), norm);
+    }
+  } else if (n === 4) {
+    if (!diagnosis && rows.length) diagnosis = diagnoseClass(rows);
+    if (diagnosis) renderDiagnosis();
+  } else if (n === 5) {
+    if (!window._outline) {
+      if (!diagnosis && gradebook && kcMap && Object.keys(kcMap).length) {
+        const norm = normalizeToLong(gradebook, kcMap);
+        rows = norm.rows; slotKC = norm.slotMap || {};
+        diagnosis = diagnoseClass(rows);
+      }
+      if (diagnosis) {
+        window._outline = buildOutline();
+        outlineVersion = 1;
+        outlineHistory = [snapshotOutline()];
+        deletedItems = [];
+        renderOutline();
+        attachOutlineSnapshot();
+      }
+    } else {
+      renderOutline();
+    }
+  }
+}
+function goToStep(n, opts) {
+  n = +n;
+  if (!n || n < 1 || n > 5 || n > maxStep) return false;
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById('stage' + i);
+    if (el) el.classList.toggle('hidden', i !== n);
+  }
+  ensureStepRendered(n);
+  setStep(n);
+  updateNextHints();
+  const scroll = !opts || opts.scroll !== false;
+  if (scroll) {
+    const el = document.getElementById('stage' + n);
+    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  return true;
+}
+// UX-1：回看已完成步时，卡片底下给“已确认，去下一步”轻提示 + 直接去下一步的按钮；
+// 当前步就是最远步时不显示（确认按钮本身就是下一步的入口）。
+function updateNextHints() {
+  for (let i = 1; i <= 4; i++) {
+    const h = document.getElementById('nextHint' + i);
+    if (h) h.classList.toggle('hidden', !(currentStep === i && i < maxStep));
+  }
+}
+// ---------- B4：三层报告的层切换（只切呈现，不动数据） ----------
+// 第 4 步里按知识点层和按群体层是两块面板，reportLayer 记当前看哪块；
+// 切层不重算、不丢已确认的结果，提纲还是那份。
+let reportLayer = 'kc';
+function reportLayerTabsHtml(active) {
+  // 没走到那一步时，对应的层点不动（和步骤条上锁住的步一个做法）：第 3 步
+  // 还没确认，点“按知识点/按群体”什么也不做就太像坏了——直接置灰。
+  const tab = (layer, label, step) => {
+    const on = active === layer;
+    const locked = step > maxStep;
+    return `<button type="button" class="small ${on ? 'secondary' : 'ghost'}" aria-pressed="${on}"${locked ? ' disabled' : ''} onclick="goToReportLayer('${layer}')">${label}</button>`;
+  };
+  return `<div class="layer-tabs" role="tablist" aria-label="三层报告">` +
+    tab('question', '第一层 · 按题（第 3 步）', 3) +
+    tab('kc', '第二层 · 按知识点（第 4 步）', 4) +
+    tab('group', '第三层 · 按群体（第 4 步）', 4) +
+    `</div><p class="muted">三层报告：按题看每道题，按知识点看掌握度矩阵，按群体看全班卡在哪、学生分组和临界生。切层不丢已确认的结果；提纲每条都写清来源，点来源能回到原数据。</p>`;
+}
+window.goToReportLayer = function (layer) {
+  if (layer === 'question') return goToStep(3);
+  if (layer === 'kc' || layer === 'group') {
+    reportLayer = layer;
+    return goToStep(4);
+  }
+  return false;
+};
+// 提纲来源链接：回原数据那一行，闪一下标出来。目标行不存在时只跳步，不报错。
+let flashTimer = null;
+function flashRow(id) {
+  const el = document.getElementById(id);
+  if (!el) return false;
+  if (el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('flash');
+  if (flashTimer) clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => el.classList.remove('flash'), 2000);
+  return true;
+}
+window.goToReportSource = function (kind, target) {
+  if (kind === 'kc') {
+    reportLayer = 'kc';
+    if (!goToStep(4)) return false;
+    if (target !== null && target !== undefined) return flashRow('kcrow-' + target);
+    return true;
+  }
+  if (kind === 'question') {
+    if (!goToStep(3)) return false;
+    return flashRow('qrow-' + target);
+  }
+  if (kind === 'group') {
+    reportLayer = 'group';
+    if (!goToStep(4)) return false;
+    return flashRow('groupPanel');
+  }
+  return false;
+};
 // ---- 断点续做（A26）：流程草稿只存在这台浏览器里，跟账号走（登录后按账号分开存） ----
 // 存已确认的步骤结果（成绩表、空白处理、知识点对应、错卷、诊断、提纲）；第 2 步
 // 没确认的中间态（OCR 拆题表、低置信度清单）不存，恢复后点一下“拆题/自动标注”重跑。
@@ -2720,6 +2929,7 @@ function readDraft() {
     const d = JSON.parse(raw);
     if (!d || d.v !== DRAFT_VERSION || !d.gradebook || !Array.isArray(d.gradebook.students) || !d.gradebook.students.length) return null;
     if (typeof d.step !== 'number' || d.step < 1 || d.step > 5) return null;
+    if (d.maxStep !== undefined && (typeof d.maxStep !== 'number' || d.maxStep < d.step || d.maxStep > 5)) d.maxStep = d.step;
     return d;
   } catch (e) { return null; }
 }
@@ -2727,7 +2937,7 @@ function saveDraft() {
   if (!gradebook || !gradebook.students || !gradebook.students.length) return false;
   try {
     const d = {
-      v: DRAFT_VERSION, savedAt: new Date().toLocaleString(), step: currentStep, demo: isDemo,
+      v: DRAFT_VERSION, savedAt: fmtDateTime(new Date()), step: currentStep, maxStep: maxStep, demo: isDemo,
       gradebook, blankState, kcMap, tagMeta, cuojuan, cjUnparsed,
       ocrText: (document.getElementById('ocrText') || {}).value || '',
       outline: { items: window._outline || null, version: outlineVersion, history: outlineHistory, deleted: deletedItems },
@@ -2783,13 +2993,17 @@ function restoreDraft() {
   } else if (d.step >= 3) {
     d.step = 2; // 没对应表，第 3 步起的结果算不出来，回到第 2 步
   }
-  renderCuojuan(); renderCjUnparsed(); renderIssues(gradebook.issues); renderFullMarks(); updateStage2Gate();
+  renderCuojuan(); renderCjUnparsed(); renderIssues(gradebook.issues); renderRecognition(); updateStage2Gate();
   // 恢复到断的那一步：第 1 步已确认（成绩表已在），第 2 步已确认（对应表已在）才往后走。
+  // UX-1：只显示断的那一步的卡片，其余步收起；最远步跟着草稿回来，步骤条上已完成步还能点回去看。
   const step = d.step;
-  if (step >= 2) { show('stage2'); if (Object.keys(kcMap).length) { document.getElementById('kcMsg').innerHTML = `对应表已恢复：${Object.keys(kcMap).length} 道题。`; document.getElementById('toStage3').disabled = false; } }
-  if (step >= 3) { show('stage3'); renderStats(computeStats(rows), norm); }
-  if (step >= 4) { show('stage4'); renderDiagnosis(); }
-  if (step >= 5) { show('stage5'); renderOutline(); }
+  maxStep = d.maxStep || d.step;
+  if (Object.keys(kcMap).length) {
+    document.getElementById('kcMsg').innerHTML = `对应表已恢复：${Object.keys(kcMap).length} 道题。`;
+    document.getElementById('toStage3').disabled = false;
+  }
+  if (step >= 2) renderLiveFeedback();
+  goToStep(step, { scroll: false });
   setStep(step);
   const banner = document.getElementById('resumeBanner');
   if (banner) {
@@ -2810,11 +3024,14 @@ function resetFlowForNewUpload() {
   rows = []; slotKC = {}; diagnosis = null;
   window._outline = null; outlineVersion = 1; outlineHistory = []; deletedItems = [];
   lowConfList = [];
-  ['stage2', 'stage3', 'stage4', 'stage5'].forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
+  maxStep = 1;   // UX-1：新考试从第 1 步重走，最远步回到 1
+  goToStep(1, { scroll: false });
   const kcMsg = document.getElementById('kcMsg'); if (kcMsg) kcMsg.innerHTML = '';
   const t3 = document.getElementById('toStage3'); if (t3) t3.disabled = true;
   const so = document.getElementById('splitOut'); if (so) so.innerHTML = '';
   const ocrOut = document.getElementById('ocrOut'); if (ocrOut) ocrOut.classList.add('hidden');
+  const lf = document.getElementById('liveFeedbackOut'); if (lf) lf.innerHTML = '';
+  splitQs = [];
   const ocrText = document.getElementById('ocrText'); if (ocrText) ocrText.value = '';
   renderCuojuan(); renderCjUnparsed();
   setStep(1);
@@ -2837,7 +3054,7 @@ function wireDensityBtn(id) {
   });
 }
 function logAudit(text) {
-  audit.push(new Date().toLocaleTimeString() + ' ' + text);
+  audit.push(fmtTime(new Date()) + ' ' + text);
   document.getElementById('auditLog').innerHTML = audit.map(a => '<li>' + a + '</li>').join('');
 }
 // 上传记录（T-20）：每次载入成绩表记一条，存在浏览器本地；重新上传覆盖当前数据，旧记录保留。
@@ -2875,7 +3092,7 @@ function renderUploads() {
 }
 function recordUpload(label, nStudents, nQuestions, nRows) {
   loadUploads();
-  uploads.push({ time: new Date().toLocaleString(), label, nStudents, nQuestions, nRows });
+  uploads.push({ time: fmtDateTime(new Date()), label, nStudents, nQuestions, nRows });
   uploads = uploads.slice(-10);
   saveUploads();
   renderUploads();
@@ -2909,7 +3126,7 @@ function attachOutlineSnapshot() {
   const nNext = items.filter(i => i.kind === '下次覆盖').length;
   const last = uploads[uploads.length - 1];
   last.outline = items;
-  last.summary = `提纲：重点讲 ${nMain} 项，下次覆盖 ${nNext} 项` + (items.length ? `；最弱 ${items[0].label}（掌握度 ${items[0].mastery.toFixed(2)}）` : '');
+  last.summary = `提纲：重点讲 ${nMain} 项，下次覆盖 ${nNext} 项` + (items.length ? `；最弱 ${items[0].label}（掌握度 ${items[0].mastery === null || items[0].mastery === undefined ? '本次未考' : items[0].mastery.toFixed(2)}）` : '');
   saveUploads();
   renderUploads();
 }
@@ -2972,6 +3189,10 @@ function collectAllUploads() {
   return out;
 }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+// 时间一律写中文 24 小时制，不用浏览器默认的本地化时间格式（英文环境会冒出 AM/PM、月份英文）。
+function pad2(n) { return (n < 10 ? '0' : '') + n; }
+function fmtTime(d) { d = d instanceof Date ? d : new Date(d); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }
+function fmtDateTime(d) { d = d instanceof Date ? d : new Date(d); return d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + fmtTime(d); }
 // 知识点编号合法范围：旧编号 1-123（ASSISTments 技能空间），
 // 或高中库编号 1001-1999（教材语言）。与 kc_tagger.js 的口径一致。
 function isValidSkillId(v) { return Number.isInteger(v) && ((v >= 1 && v <= 123) || (v >= 1001 && v <= 1999)); }
@@ -3079,6 +3300,7 @@ function applyTagged(tagged, bank, source, qs) {
     if (top.confidence < 0.5) low++;
     if (inputs[i] && !inputs[i].value) { inputs[i].value = top.skill; filled++; }
   });
+  renderLiveFeedback();
   return { low, filled };
 }
 // ---------- 低置信度清单（A7）：自动标注完，置信度低的题进这张清单批量确认 ----------
@@ -3138,6 +3360,57 @@ function renderLowConfList() {
   html += '</tbody></table>';
   out.innerHTML = html;
   if (applyBtn) applyBtn.disabled = done < total;
+  renderLiveFeedback();
+}
+// ---------- B3.1/B3.2：每题即时结论（核对步同屏） ----------
+// 成绩表和对应表一确认就出每道题的通过率、区分度雏形和一句话结论；拆题表
+// 里改一处编号、低置信度清单里换一个知识点、记一条错卷，这里马上跟着变，
+// 不用等整轮跑完。算的是作答本身（通过率/得分率/区分度），不用等诊断模型。
+// 拆题表还没点“用这份对应关系”时，按表里当前填的编号算；没对应表时按
+// 成绩表直接算通过率，知识点写“未标”。splitQs 记当前这份拆题结果，
+// 拆题表的输入框只存下标，靠它翻回题号。
+let splitQs = [];
+function effectiveKcMapForFeedback() {
+  const map = Object.assign({}, kcMap || {});
+  try {
+    document.querySelectorAll('#splitOut input[data-qi]').forEach(inp => {
+      const q = splitQs[+inp.dataset.qi];
+      const v = +inp.value;
+      if (q && isValidSkillId(v)) map[q.qid] = v;
+    });
+  } catch (e) {}
+  return map;
+}
+function renderLiveFeedback() {
+  const out = document.getElementById('liveFeedbackOut');
+  if (!out) return;
+  if (!gradebook || !gradebook.students || !gradebook.students.length) { out.innerHTML = ''; return; }
+  const map = effectiveKcMapForFeedback();
+  let rows2;
+  if (Object.keys(map).length) {
+    rows2 = normalizeToLong(gradebook, map).rows;
+  } else {
+    // 还没对应表：直接从成绩表算每题的得分情况（只算通过率，不进诊断）。
+    rows2 = [];
+    gradebook.students.forEach(st => {
+      gradebook.questions.forEach(q => {
+        const v = st.scores[q.qid];
+        if (v === null || v === undefined) return;
+        rows2.push({ student: st.id, q: String(q.qid), y: q.full > 0 ? Math.min(1, Math.max(0, v / q.full)) : 0 });
+      });
+    });
+  }
+  const fb = buildQuestionFeedback(rows2, map, cuojuan);
+  if (!fb.length) { out.innerHTML = '<p class="muted">还没有能算的作答：先确认成绩表，再上传对应表或拆题。</p>'; return; }
+  let html = '<div class="table-scroll"><table><caption>每题即时结论</caption><thead><tr><th scope="col">题号</th><th scope="col">知识点</th><th scope="col" class="num">做过</th><th scope="col" class="num">通过率</th><th scope="col" class="num">平均得分率</th><th scope="col" class="num">区分度（雏形）</th><th scope="col">一句话结论</th></tr></thead><tbody>';
+  fb.forEach(x => {
+    const name = x.skill ? kcNameById(x.skill) : '';
+    const skillCell = x.skill ? `${x.skill} 号${name ? ' · ' + esc(name) : ''}` : '<span class="muted">未标</span>';
+    const discCell = x.disc === null ? '<span class="muted">算不出</span>' : x.disc.toFixed(2) + (x.disc < 0.1 ? '（偏低）' : '');
+    html += `<tr id="lfb-${x.qid}"><td>第 ${x.qid} 题</td><td>${skillCell}</td><td class="num">${x.n}</td><td class="num">${(x.fullRate * 100).toFixed(0)}%</td><td class="num">${(x.acc * 100).toFixed(0)}%</td><td class="num">${discCell}</td><td>${esc(x.sentence)}</td></tr>`;
+  });
+  html += '</tbody></table></div><p class="muted">通过率 = 得满分的人 ÷ 做过这道题的人；区分度是雏形：总分前三分之一与后三分之一的满分率之差，接近 0（偏低）说明好学生和差学生错得差不多，这道题分不太出水平。</p>';
+  out.innerHTML = html;
 }
 // 拆题表里某一行的知识点输入框（确认清单改值时同步写回去）。
 function splitInputFor(idx) {
@@ -3472,6 +3745,21 @@ function saveColMap(map) {
 }
 
 // ---------- wide gradebook (pure) ----------
+// B2.1：学生列自动识别（纯函数）：在前 3 列里按表头认学号/姓名列；
+// 认不出来就按位置默认第 1 列学号、第 2 列姓名（置信度中，要老师看一眼）。
+function detectStudentCols(header) {
+  const h = (header || []).map(x => (x || '').replace(/^\ufeff/, '').trim());
+  let idCol = -1, nameCol = -1, idByHeader = false, nameByHeader = false;
+  const scan = Math.min(h.length, 3);
+  for (let c = 0; c < scan; c++) {
+    if (idCol < 0 && /学号|学生编号|学籍号/.test(h[c])) { idCol = c; idByHeader = true; }
+    if (nameCol < 0 && /姓名|学生姓名/.test(h[c])) { nameCol = c; nameByHeader = true; }
+  }
+  if (idCol < 0) idCol = 0;
+  if (nameCol < 0) nameCol = (idCol === 0 ? 1 : 0);
+  if (idCol === nameCol) { idCol = 0; nameCol = 1; idByHeader = false; nameByHeader = false; }
+  return { idCol, nameCol, idByHeader, nameByHeader };
+}
 function parseWideGradebook(text, colMap) {
   return parseWideGradebookGrid(parseCSVText(text), colMap);
 }
@@ -3480,13 +3768,18 @@ function parseWideGradebookGrid(grid, colMap) {
   const issues = [];
   if (grid.length < 2) return { students: [], questions: [], issues: [{ type: 'block', msg: '表里没有数据行。', suggestion: '建议：确认表里至少有一行数据，或下载标准模板对照。', kind: 'nodata' }], header: grid[0] || [], qCols: [], templateKC: {}, templateAnswers: {} };
   const header = grid[0];
+  const plan = detectStudentCols(header);   // B2.1：学号/姓名列先按表头认
   const qCols = [];
   const seenQid = new Set();
-  for (let c = 2; c < header.length; c++) {
+  for (let c = 0; c < header.length; c++) {
+    if (c === plan.idCol || c === plan.nameCol) continue;   // 学生列不是题
     const h = header[c];
     if (!h) continue;
     const m = h.match(/第\s*(\d+)\s*题[（(](\d+)\s*分[)）]/);
-    if (m) { qCols.push({ col: c, qid: +m[1], full: +m[2], inferred: false, basis: '列名写明 ' + m[2] + ' 分' }); seenQid.add(+m[1]); continue; }
+    if (m) {
+      if (seenQid.has(+m[1])) { issues.push({ type: 'warn', msg: `“${h}”对应的第 ${m[1]} 题已经有一列了，这列已跳过。`, suggestion: '建议：删掉重复的列再传。', kind: 'dupcol', qid: +m[1] }); continue; }
+      qCols.push({ col: c, qid: +m[1], full: +m[2], inferred: false, basis: '列名写明 ' + m[2] + ' 分' }); seenQid.add(+m[1]); continue;
+    }
     const remembered = colMap[h];
     if (remembered && remembered.qid) {
       if (seenQid.has(remembered.qid)) { issues.push({ type: 'warn', msg: `“${h}”对应的第 ${remembered.qid} 题已经有一列了，这列已跳过。`, suggestion: '建议：删掉重复的列再传。', kind: 'dupcol', qid: remembered.qid }); continue; }
@@ -3542,7 +3835,7 @@ function parseWideGradebookGrid(grid, colMap) {
   for (let r = 1; r < grid.length; r++) {
     if (metaRows.has(r)) continue;
     const row = grid[r];
-    const sid = row[0] || '', name = row[1] || '';
+    const sid = row[plan.idCol] || '', name = row[plan.nameCol] || '';
     if (!sid && !name) { issues.push({ type: 'warn', msg: `第 ${r + 1} 行是空行，已跳过。`, suggestion: '建议：删掉空行再传，或忽略。', kind: 'emptyrow' }); continue; }
     if (seen.has(sid)) { issues.push({ type: 'block', msg: `学号 ${sid} 出现了两次，请在表里去重。`, suggestion: '建议：在表里去重后重新上传。', kind: 'dupstudent' }); continue; }
     seen.add(sid);
@@ -3737,6 +4030,216 @@ function diagnosisSummary(d) {
   return `这次最弱的是 ${skillLabel(s)}：${topQ}没得满分，一共 ${totalMiss} 人次，掌握度 ${mastery[s].toFixed(2)}。建议先讲这个知识点的概念，再讲这几道错题。`;
 }
 
+// ---------- B3：即时反馈（纯函数，单测直接调） ----------
+// 区分度雏形：按总分把学生分成前三分之一与后三分之一，两组在这道题上的
+// 满分率之差。越大越能分出好学生和差学生；接近 0 说明大家错得差不多；
+// 负值说明差学生反而做得更好，这道题可能有问题。学生少于 6 人、或某组
+// 没人做这道题时算不出来，返回 null——不编数字。
+function questionDiscrimination(rows, qid) {
+  const byStu = {};
+  (rows || []).forEach(r => { (byStu[r.student] = byStu[r.student] || []).push(r); });
+  const totals = Object.entries(byStu).map(([sid, evs]) => ({ sid, total: evs.reduce((a, r) => a + r.y, 0) }));
+  if (totals.length < 6) return null;
+  totals.sort((a, b) => b.total - a.total);
+  const k = Math.max(1, Math.floor(totals.length / 3));
+  const top = totals.slice(0, k), bot = totals.slice(-k);
+  const fullRateOf = grp => {
+    const rs = (rows || []).filter(r => grp.some(g => g.sid === r.student) && String(r.q) === String(qid));
+    return rs.length ? rs.filter(r => r.y === 1).length / rs.length : null;
+  };
+  const a = fullRateOf(top), b = fullRateOf(bot);
+  return (a === null || b === null) ? null : Math.round((a - b) * 100) / 100;
+}
+// 每题一句话结论：只看这道题的错人数、得分率和记的错因，不看别的题。
+// 全班都会就建议跳过；一半以上没得满分就建议讲评，有错因就点出主错因；
+// 中间两档按错的比例分“带过”和“点一下”。文案是固定规则生成的，不是
+// 模型写的，老师一眼能核对。
+function questionFeedbackSentence(qid, fb) {
+  const missRate = fb.n ? fb.nMiss / fb.n : 0;
+  const pct = Math.round(fb.acc * 100);
+  if (fb.nMiss === 0) return '建议跳过：全班都会。';
+  if (missRate >= 0.5) return `建议讲评：第 ${qid} 题 ${fb.nMiss} 人错` + (fb.cause ? `，${fb.cause}为主。` : `，得分率 ${pct}%。`);
+  const mid = `建议${missRate >= 0.2 ? '带过' : '点一下'}：第 ${qid} 题 ${fb.nMiss} 人错` + (fb.cause ? `，${fb.cause}为主，得分率 ${pct}%。` : `，得分率 ${pct}%。`);
+  return mid;
+}
+// 每题即时结论：每道题一行——做过人数、通过率（满分率）、平均得分率、
+// 区分度雏形、知识点、一句话结论。rows 只要有 student/q/y 就能算，不
+// 依赖诊断模型，所以核对步改映射不用等诊断跑完。没对应表时知识点写“未标”，
+// 通过率照样算；一行都没算出来时返回空数组。
+function buildQuestionFeedback(rows, kcMap, cuojuanMap) {
+  const byQ = {};
+  (rows || []).forEach(r => {
+    const e = byQ[r.q] || (byQ[r.q] = { n: 0, full: 0, sum: 0 });
+    e.n++; e.sum += r.y; if (r.y === 1) e.full++;
+  });
+  return Object.keys(byQ).map(q => +q).sort((a, b) => a - b).map(qid => {
+    const e = byQ[qid];
+    const nMiss = e.n - e.full;
+    const acc = e.n ? e.sum / e.n : 0;
+    const cj = (cuojuanMap || {})[qid];
+    const fb = { qid, skill: (kcMap || {})[qid] || null, n: e.n, fullRate: e.n ? e.full / e.n : 0, acc, nMiss,
+      disc: questionDiscrimination(rows, qid), cause: cj ? (cj.cause || '') : '' };
+    fb.sentence = questionFeedbackSentence(qid, fb);
+    return fb;
+  });
+}
+// ---------- B4：三层报告（纯函数，单测直接调） ----------
+// 选项分布：成绩表里只有每题得分，没有选择题的选项数据，编不出来也不编。
+// 按题层给的是能算出来的——正确率、得分率、得分分布（满分/部分/零分）、
+// 典型错法与错因、一句话结论。选项分布要等以后收选项数据再做。
+function buildPerQuestionReport(rows, kcMap, cuojuanMap) {
+  const fb = buildQuestionFeedback(rows, kcMap, cuojuanMap);
+  return fb.map(x => {
+    const d = scoreDistribution(rows, x.qid);
+    const notes = cuojuanNotesForQuestions([x.qid]);
+    return { qid: x.qid, skill: x.skill, n: x.n, fullRate: x.fullRate, acc: x.acc, nMiss: x.nMiss,
+      disc: x.disc, cause: x.cause, sentence: x.sentence,
+      dist: { full: d.full, partial: d.partial, zero: d.zero },
+      typical: notes.map(n => ({ typical: n.typical, cause: n.cause || '' })) };
+  });
+}
+// 某知识点在哪个教材章节：先找这场考试的库，再找当前库，最后找演示库；
+// 演示库 5 个点没分章节，返回 null——页面上归到“未分章节”，不猜章节名。
+function kcChapterById(id) {
+  try {
+    const banks = [];
+    const exam = examBankPoints();
+    if (exam) banks.push(exam);
+    const act = activeBankPoints();
+    if (act) banks.push(act);
+    const demo = bankPoints('demo');
+    if (demo) banks.push(demo);
+    for (const pts of banks) {
+      const e = (pts || []).find(x => x.id === id);
+      if (e) return { chapter: e.chapter || null, module: e.module || null, name: e.name || '' };
+    }
+  } catch (err) {}
+  return { chapter: null, module: null, name: '' };
+}
+// 知识点编号反查引擎槽位：旧编号 1–123 直接是编号-1；1001+ 的查 slotKC。
+// 找不到时返回 null，调用方不画链接、不报错。
+function slotForSkillId(id) {
+  if (id >= 1 && id <= 123) return id - 1;
+  for (const [s, kc] of Object.entries(slotKC || {})) { if (kc && kc.id === id) return +s; }
+  return null;
+}
+// 按知识点层 · 掌握度矩阵：和诊断表同一批行（考到过的在前、按掌握度从低
+// 到高，最多 15 行），每行多带章节、得分率、错得最多的题。渲染时按章节
+// 分组，组内还是掌握度从低到高，一眼看出哪个知识点薄弱。
+function buildKcMatrix(diag) {
+  const d = diag || diagnosis;
+  if (!d) return [];
+  const { mastery, testedN, testedC, missQ, order } = d;
+  const tableRows = [...order.filter(s => testedN[s] >= 3), ...order.filter(s => testedN[s] < 3)].slice(0, 15);
+  return tableRows.map(s => {
+    const kc = slotKC[s];
+    const skillId = kc ? kc.id : s + 1;
+    const ch = kcChapterById(skillId);
+    const topQ = Object.entries(missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([q, n]) => ({ q: +q, n }));
+    return { s, skillId, name: kc ? kc.name : (kcNameById(skillId) || ''), chapter: ch.chapter, module: ch.module,
+      mastery: mastery[s], rate: testedN[s] ? testedC[s] / testedN[s] : null, testedN: testedN[s] || 0, topQ };
+  });
+}
+// 按群体层 · 共性错因：错因按记的错卷条数排，卡住的题按错的人数排。
+// 没记错卷的题没有错因，不硬归一类；全班卡在哪先看错得最多的 3 道题。
+function commonCauses(cuojuanMap, fb) {
+  const byCause = {};
+  Object.values(cuojuanMap || {}).forEach(n => {
+    if (!n || !n.cause) return;
+    const e = byCause[n.cause] || (byCause[n.cause] = { cause: n.cause, notes: 0, questions: [] });
+    e.notes++;
+    if (e.questions.indexOf(n.qid) < 0) e.questions.push(n.qid);
+  });
+  const list = Object.values(byCause).sort((a, b) => (b.notes - a.notes) || (b.questions.length - a.questions.length));
+  const topStuck = (fb || []).filter(x => x.nMiss > 0).sort((a, b) => b.nMiss - a.nMiss).slice(0, 3)
+    .map(x => ({ qid: x.qid, nMiss: x.nMiss, cause: x.cause || '' }));
+  return { byCause: list, topStuck };
+}
+// 按群体层 · 临界生：及格线默认 60%（总分 50 分就是 30 分），
+// 距及格线 3 分以内（[线-3, 线)）的学生列出来，差几分写清。
+// 总分按表中各题得分相加，空白按缺考不计分；一道题都没做的学生不算。
+function borderlineStudents(gradebook, passRate, gap) {
+  const pr = (passRate === undefined || passRate === null) ? 0.6 : passRate;
+  const g = (gap === undefined || gap === null) ? 3 : gap;
+  const gb = gradebook || {};
+  const full = (gb.questions || []).reduce((a, q) => a + (q.full || 0), 0);
+  const line = full * pr;
+  const borderline = [];
+  let belowLine = 0, nStudents = 0;
+  (gb.students || []).forEach(st => {
+    let total = 0, answered = false;
+    (gb.questions || []).forEach(q => {
+      const v = st.scores ? st.scores[q.qid] : null;
+      if (v !== null && v !== undefined) { total += v; answered = true; }
+    });
+    if (!answered) return;
+    nStudents++;
+    if (total < line) belowLine++;
+    if (total >= line - g && total < line) borderline.push({ sid: st.id, total, gap: Math.round((line - total) * 100) / 100 });
+  });
+  borderline.sort((a, b) => b.total - a.total);
+  return { line, full, passRate: pr, gap: g, borderline, belowLine, nStudents };
+}
+// B4.4：提纲每条的来源——写清来自哪一层、哪个数，点开能回原数据。
+// 重点讲：按知识点层的掌握度 + 本次得分率；下次覆盖：本次未考。
+function outlineSource(it, diag) {
+  if (!it) return { text: '', layer: 'kc', step: 4, slot: null, topQ: null };
+  if (it.kind === '下次覆盖') {
+    return { text: `来自按知识点层：${it.bankName || ''} 本次未考`, layer: 'kc', step: 4, slot: null, topQ: null };
+  }
+  const s = it.s;
+  const d = diag || diagnosis;
+  const rate = (d && d.testedN[s]) ? (d.testedC[s] / d.testedN[s]) : null;
+  const mastery = (d && d.mastery) ? d.mastery[s] : it.mastery;
+  const topQEntries = (d && d.missQ[s]) ? Object.entries(d.missQ[s]).sort((a, b) => b[1] - a[1]) : [];
+  return {
+    text: `来自按知识点层：${outlineLabel(it)} 掌握度 ${mastery !== null && mastery !== undefined ? mastery.toFixed(2) : '—'}，本次得分率 ${rate === null ? '未考' : Math.round(rate * 100) + '%'}`,
+    layer: 'kc', step: 4, slot: s, topQ: topQEntries.length ? +topQEntries[0][0] : null
+  };
+}
+// ---------- B3.3：重点讲阈值（可调，默认就是现在的规则） ----------
+// 默认：按本次得分率 < 0.6 取重点讲（彩排修复后定的规则，一个字没改）。
+// 老师可以改成按掌握度取，或改数值（0.3–0.9）；改完提纲马上重算。
+// 阈值存在浏览器本地（examReviewOutlineCut），和分组边界一个做法。
+const DEFAULT_OUTLINE_CUT = { mode: 'rate', value: 0.6 };
+let outlineCut = { mode: 'rate', value: 0.6 };
+function loadOutlineCut() {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const s = JSON.parse(localStorage.getItem('examReviewOutlineCut') || '{}');
+    if (isValidOutlineCut(s.mode, s.value)) outlineCut = { mode: s.mode, value: s.value };
+  } catch (e) {}
+}
+function saveOutlineCut() {
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem('examReviewOutlineCut', JSON.stringify(outlineCut)); } catch (e) {}
+}
+function isValidOutlineCut(mode, value) {
+  return (mode === 'rate' || mode === 'mastery') && typeof value === 'number' && isFinite(value) && value >= 0.3 && value <= 0.9;
+}
+function outlineCutLabel(cut) {
+  return (cut.mode === 'mastery' ? '掌握度' : '本次得分率') + ' < ' + cut.value.toFixed(2).replace(/0$/, '');
+}
+// 调前调后对比：默认阈值出的重点讲，和当前阈值出的重点讲，各多讲 / 少讲了
+// 哪几条。只比重点讲（kind === '讲'），下次覆盖不进对比——下次覆盖本来就
+// 跟着重点讲的章走。diag 用来写每条的得分率/掌握度，没传时只写名字。
+function outlineFocusDiff(beforeItems, afterItems, diag) {
+  const key = it => (it.bankId !== undefined && it.bankId !== null) ? 'b' + it.bankId : 's' + it.s;
+  const focus = items => (items || []).filter(it => it.kind === '讲');
+  const beforeKeys = {}, afterKeys = {};
+  focus(beforeItems).forEach(it => { beforeKeys[key(it)] = it; });
+  focus(afterItems).forEach(it => { afterKeys[key(it)] = it; });
+  const detail = it => {
+    const s = it.s;
+    if (s === null || s === undefined || !diag) return outlineLabel(it);
+    const rate = diag.testedN[s] ? (diag.testedC[s] / diag.testedN[s] * 100).toFixed(0) + '%' : '未考';
+    return `${outlineLabel(it)}（得分率 ${rate}，掌握度 ${diag.mastery[s].toFixed(2)}）`;
+  };
+  return {
+    added: focus(afterItems).filter(it => !beforeKeys[key(it)]).map(detail),
+    removed: focus(beforeItems).filter(it => !afterKeys[key(it)]).map(detail),
+  };
+}
+
 // ---------- A13：学生分组（纯函数） ----------
 // 按有证据的最弱知识点（最多 5 个）上的平均掌握度分三组，每组一句话讲评建议。
 // 边界老师可调，默认 0.5 / 0.7，存在浏览器本地；调完重算。
@@ -3811,7 +4314,7 @@ let outlineVersion = 1;
 let outlineHistory = [];
 let deletedItems = [];
 function snapshotOutline() {
-  return { version: outlineVersion, items: (window._outline || []).map(it => ({ s: it.s, kind: it.kind, mastery: it.mastery, bankId: (it.bankId !== undefined && it.bankId !== null) ? it.bankId : null, bankName: it.bankName || '' })), time: new Date().toLocaleTimeString() };
+  return { version: outlineVersion, items: (window._outline || []).map(it => ({ s: it.s, kind: it.kind, mastery: it.mastery, bankId: (it.bankId !== undefined && it.bankId !== null) ? it.bankId : null, bankName: it.bankName || '' })), time: fmtTime(new Date()) };
 }
 function bumpOutlineVersion(reason) {
   outlineVersion++;
@@ -3858,8 +4361,8 @@ window.showOutlineVersion = function (v) {
 };
 
 // expose pure core for Node testing
-if (typeof window !== 'undefined') window.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, outlineLabel, outlineMasteryText, examBankPoints, nextCoverItems, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, getTagMeta: () => tagMeta, setTagMetaFromMap, scoreDistribution, diagnosisSummary, groupStudents, getGroupCuts: () => groupCuts, moveOutlineItem, getOutlineVersion: () => outlineVersion, getOutlineHistory: () => outlineHistory, getDeletedItems: () => deletedItems, getOutline: () => window._outline, saveDraft, restoreDraft, clearDraft, getDraft: () => readDraft(), getCurrentStep: () => currentStep, getDraftKey: () => draftKey(), getBlankState: () => ({...blankState}), getCuojuan: () => cuojuan, getUnparsedCuojuan: () => cjUnparsed, getCauses: () => effectiveCauses.slice(), getBankInfo: () => activeBankMeta(), getBankLine: () => bankLineText(), getAdminAudit: () => window.__auth.listAdminAudit(), loadDemoExample, computeDemoSample, renderSampleCard, refreshHeroTitle, refreshSampleState, showOutlineStep, getIsDemo: () => isDemo, hasStash, stashDraft, restoreStashedDraft, preloadDemoIfFirstVisit, MODEL };
-if (typeof globalThis !== 'undefined') globalThis.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, outlineLabel, outlineMasteryText, examBankPoints, nextCoverItems, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, getTagMeta: () => tagMeta, setTagMetaFromMap, scoreDistribution, diagnosisSummary, groupStudents, getGroupCuts: () => groupCuts, moveOutlineItem, getOutlineVersion: () => outlineVersion, getOutlineHistory: () => outlineHistory, getDeletedItems: () => deletedItems, getOutline: () => window._outline, saveDraft, restoreDraft, clearDraft, getDraft: () => readDraft(), getCurrentStep: () => currentStep, getDraftKey: () => draftKey(), getBlankState: () => ({...blankState}), getCuojuan: () => cuojuan, getUnparsedCuojuan: () => cjUnparsed, getCauses: () => effectiveCauses.slice(), getBankInfo: () => activeBankMeta(), getBankLine: () => bankLineText(), getAdminAudit: () => window.__auth.listAdminAudit(), loadDemoExample, computeDemoSample, renderSampleCard, refreshHeroTitle, refreshSampleState, showOutlineStep, getIsDemo: () => isDemo, hasStash, stashDraft, restoreStashedDraft, preloadDemoIfFirstVisit, MODEL };
+if (typeof window !== 'undefined') window.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, detectStudentCols, recognizeColumns, recognizeLongTable, recognitionSummary, recogPending, confirmRecognition, ignoreRecognition, renderRecognition, getRecognition: () => (gradebook && gradebook.recognition) || null, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, outlineLabel, outlineMasteryText, examBankPoints, nextCoverItems, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, recordTeacherOverride, getTagMeta: () => tagMeta, setTagMetaFromMap, scoreDistribution, diagnosisSummary, groupStudents, getGroupCuts: () => groupCuts, questionDiscrimination, questionFeedbackSentence, buildQuestionFeedback, buildPerQuestionReport, kcChapterById, slotForSkillId, buildKcMatrix, commonCauses, borderlineStudents, outlineSource, goToReportLayer, goToReportSource, flashRow, getReportLayer: () => reportLayer, setReportLayer: (l) => { reportLayer = l; }, outlineCutLabel, isValidOutlineCut, outlineFocusDiff, getOutlineCut: () => ({...outlineCut}), setOutlineCut, buildOutline, renderLiveFeedback, moveOutlineItem, getOutlineVersion: () => outlineVersion, getOutlineHistory: () => outlineHistory, getDeletedItems: () => deletedItems, getOutline: () => window._outline, saveDraft, restoreDraft, clearDraft, getDraft: () => readDraft(), getCurrentStep: () => currentStep, getDraftKey: () => draftKey(), getBlankState: () => ({...blankState}), getCuojuan: () => cuojuan, getUnparsedCuojuan: () => cjUnparsed, getCauses: () => effectiveCauses.slice(), getBankInfo: () => activeBankMeta(), getBankLine: () => bankLineText(), getAdminAudit: () => window.__auth.listAdminAudit(), loadDemoExample, computeDemoSample, renderSampleCard, refreshHeroTitle, refreshSampleState, showOutlineStep, getIsDemo: () => isDemo, hasStash, stashDraft, restoreStashedDraft, preloadDemoIfFirstVisit, goToStep, getMaxStep: () => maxStep, MODEL };
+if (typeof globalThis !== 'undefined') globalThis.__core = { parseWideGradebook, parseWideGradebookGrid, parsePastedTable, loadColMap, saveColMap, rememberColMap, detectStudentCols, recognizeColumns, recognizeLongTable, recognitionSummary, recogPending, confirmRecognition, ignoreRecognition, renderRecognition, getRecognition: () => (gradebook && gradebook.recognition) || null, parseKCMap, splitQuestions, normalizeToLong, computeStats, diagnoseStudent, diagnoseClass, masteryTier, tierCounts, buildSummary, buildStandardTemplate, outlineLabel, outlineMasteryText, examBankPoints, nextCoverItems, getGradebook: () => gradebook, getKcMap: () => kcMap, buildLowConfItems, getLowConf: () => lowConfList, traceForSkill, recordTeacherOverride, getTagMeta: () => tagMeta, setTagMetaFromMap, scoreDistribution, diagnosisSummary, groupStudents, getGroupCuts: () => groupCuts, questionDiscrimination, questionFeedbackSentence, buildQuestionFeedback, buildPerQuestionReport, kcChapterById, slotForSkillId, buildKcMatrix, commonCauses, borderlineStudents, outlineSource, goToReportLayer, goToReportSource, flashRow, getReportLayer: () => reportLayer, setReportLayer: (l) => { reportLayer = l; }, outlineCutLabel, isValidOutlineCut, outlineFocusDiff, getOutlineCut: () => ({...outlineCut}), setOutlineCut, buildOutline, renderLiveFeedback, moveOutlineItem, getOutlineVersion: () => outlineVersion, getOutlineHistory: () => outlineHistory, getDeletedItems: () => deletedItems, getOutline: () => window._outline, saveDraft, restoreDraft, clearDraft, getDraft: () => readDraft(), getCurrentStep: () => currentStep, getDraftKey: () => draftKey(), getBlankState: () => ({...blankState}), getCuojuan: () => cuojuan, getUnparsedCuojuan: () => cjUnparsed, getCauses: () => effectiveCauses.slice(), getBankInfo: () => activeBankMeta(), getBankLine: () => bankLineText(), getAdminAudit: () => window.__auth.listAdminAudit(), loadDemoExample, computeDemoSample, renderSampleCard, refreshHeroTitle, refreshSampleState, showOutlineStep, getIsDemo: () => isDemo, hasStash, stashDraft, restoreStashedDraft, preloadDemoIfFirstVisit, goToStep, getMaxStep: () => maxStep, MODEL };
 
 // 空白格处理状态（A3）：每张表载入时重置；老师点了批量处理才算处理完，
 // 处理完之前“确认成绩表”按钮点不动；处理记录进审计。
@@ -3868,7 +4371,8 @@ function blankIssues(gb) { return (gb && gb.issues ? gb.issues : []).filter(i =>
 function updateStage2Gate() {
   const blocked = !gradebook || gradebook.issues.some(i => i.type === 'block') || gradebook.students.length === 0;
   const blanksOpen = blankState.total > 0 && !blankState.handled;
-  document.getElementById('toStage2').disabled = blocked || blanksOpen;
+  const recOpen = recogPending(gradebook && gradebook.recognition) > 0;   // B2：识别没确认完也点不动
+  document.getElementById('toStage2').disabled = blocked || blanksOpen || recOpen;
 }
 function renderIssues(issues) {
   const el = document.getElementById('issuesOut');
@@ -3911,7 +4415,7 @@ function handleBlanks(mode) {
   toast(mode === 'zero' ? `已把 ${n} 个空白补 0 分。` : `已把 ${n} 个空白按缺考处理。`);
   saveDraft();
 }
-function applyGradebook(gb, label) {
+function applyGradebook(gb, label, grid) {
   const nBlank = blankIssues(gb).length;
   blankState = { total: nBlank, handled: nBlank === 0, mode: '' };
   let nRows = 0;
@@ -3919,8 +4423,10 @@ function applyGradebook(gb, label) {
   document.getElementById('uploadMsg').innerHTML =
     `已载入 ${label}：${gb.students.length} 名学生，${gb.questions.length} 道题，${nRows} 条作答。` +
     (nBlank ? `其中 ${nBlank} 个空已按“不算 0 分”处理。` : '');
+  // B2：宽表在这一步认列（长表在 loadLongTableText 里已认好，沿用）。
+  if (!gb.recognition) gb.recognition = recognizeColumns(gb.header || [], gb.qCols || [], grid || null);
   renderIssues(gb.issues);
-  renderFullMarks();
+  renderRecognition();
   updateStage2Gate();
   recordUpload(label, gb.students.length, gb.questions.length, nRows);
   logAudit(`载入成绩表：${gb.students.length} 名学生，${gb.questions.length} 道题，${gb.issues.length} 条提示`);
@@ -3938,24 +4444,238 @@ function fullMarksPreview() {
     return `第 ${q.qid} 题 ${n ? Math.round(sum / n * 100) + '%' : '—'}`;
   }).join(' · ');
 }
-function renderFullMarks() {
+// ---------- B2：导入三步（识别 → 确认 → 兜底） ----------
+// B2：识别结果汇总（纯函数）：中低项要老师确认/忽略才算过。
+// needed 在认出时定死（中低置信度）：改满分把一项推成高置信度后，
+// 它仍算“已确认的那一项”，计数器不回缩。
+function recognitionSummary(items, canProceed) {
+  (items || []).forEach(i => { i.needed = i.confidence !== 'high'; });
+  const need = (items || []).filter(i => i.needed);
+  return {
+    items: items || [],
+    failures: (items || []).filter(i => i.confidence === 'low' && !i.ignored),
+    nNeed: need.length,
+    nDone: need.filter(i => i.confirmed || i.ignored).length,
+    canProceed: !!canProceed,
+  };
+}
+// B2：还有几项识别没确认/忽略（纯函数，供门禁与提示用）。
+function recogPending(rec) {
+  if (!rec || !rec.items) return 0;
+  return rec.items.filter(i => (i.confidence === 'medium' || i.confidence === 'low') && !i.confirmed && !i.ignored).length;
+}
+// B2：确认/忽略后重算计数（汇总里的 failures 与 nDone 是快照，改了项要刷新）。
+function refreshRecognitionCounts() {
+  const rec = gradebook && gradebook.recognition;
+  if (!rec) return;
+  rec.failures = rec.items.filter(i => i.confidence === 'low' && !i.ignored);
+  rec.nDone = rec.items.filter(i => i.needed && (i.confirmed || i.ignored || i.confidence === 'high')).length;
+}
+// B2.1 宽表识别（纯函数）：按列认学号/姓名/题目/总分/认不出，
+// 每项带置信度与依据。grid 可空（旧草稿恢复时没有原表）：
+// 空表头列没数据可查就跳过，不硬猜。建议题号按“前面已认出的题数 +1”
+// 取（第一列学号、第二列姓名不占题号）；已被占用的顺延到最大题号 +1。
+function recognizeColumns(header, qCols, grid) {
+  header = header || [];
+  qCols = qCols || [];
+  const plan = detectStudentCols(header);
+  const byCol = {};
+  qCols.forEach(q => { byCol[q.col] = q; });
+  const taken = new Set(qCols.map(q => q.qid));
+  const maxQid = taken.size ? Math.max(...taken) : 0;
+  const items = [];
+  const seenQid = new Set();
+  const qBefore = {};
+  let qCount = 0;
+  for (let c = 0; c < header.length; c++) { qBefore[c] = qCount; if (byCol[c]) qCount++; }
+  const colHasData = (c) => {
+    if (!grid) return false;
+    for (let r = 1; r < grid.length; r++) { if ((grid[r][c] || '').trim() !== '') return true; }
+    return false;
+  };
+  const suggestQid = (c) => {
+    let sug = qBefore[c] + 1;
+    if (taken.has(sug)) sug = maxQid + 1;
+    return sug;
+  };
+  for (let c = 0; c < header.length; c++) {
+    const raw = header[c] || '';
+    const h = raw.replace(/^\ufeff/, '').trim();
+    const q = byCol[c];
+    if (q) {
+      items.push({ col: c, header: raw, role: 'question', qid: q.qid, full: q.full,
+        source: q.basis || ('列名写明 ' + q.full + ' 分'),
+        confidence: q.inferred ? 'medium' : 'high', confirmed: !q.inferred, ignored: false });
+      seenQid.add(q.qid);
+      continue;
+    }
+    if (c === plan.idCol) {
+      items.push({ col: c, header: raw, role: 'id', qid: null, full: null,
+        source: plan.idByHeader ? '表头写明学号' : '按位置认（表头没写学号）',
+        confidence: plan.idByHeader ? 'high' : 'medium', confirmed: plan.idByHeader, ignored: false });
+      continue;
+    }
+    if (c === plan.nameCol) {
+      items.push({ col: c, header: raw, role: 'name', qid: null, full: null,
+        source: plan.nameByHeader ? '表头写明姓名' : '按位置认（表头没写姓名）',
+        confidence: plan.nameByHeader ? 'high' : 'medium', confirmed: plan.nameByHeader, ignored: false });
+      continue;
+    }
+    if (/总分|合计|总成绩/.test(h)) {
+      items.push({ col: c, header: raw, role: 'total', qid: null, full: null,
+        source: '表头写明总分', confidence: 'high', confirmed: true, ignored: false });
+      continue;
+    }
+    const loose = h.match(/第?\s*(\d+)\s*题/) || h.match(/^Q\s*(\d+)$/i) || h.match(/^(\d+)$/);
+    if (loose && seenQid.has(+loose[1])) {
+      items.push({ col: c, header: raw, role: 'duplicate', qid: +loose[1], full: null,
+        source: `第 ${c + 1} 列“${h}”对应的第 ${loose[1]} 题已经有一列了：删掉重复的列再传，或点“忽略此列”。`,
+        confidence: 'low', confirmed: false, ignored: false });
+      continue;
+    }
+    if (loose) {
+      // 看着是题号，但解析时没进题目列（整列没得分）：不硬猜满分，标出来让老师看。
+      items.push({ col: c, header: raw, role: 'question-noscore', qid: +loose[1], full: null,
+        source: `第 ${c + 1} 列“${h}”看着是第 ${loose[1]} 题，但里面没有得分：确认这道题是不是真的没人得分，或改成“第 ${loose[1]} 题（5 分）”再传。`,
+        confidence: 'low', confirmed: false, ignored: false });
+      continue;
+    }
+    if (!h) {
+      if (!colHasData(c)) continue;   // 全空的列直接跳过
+      items.push({ col: c, header: raw, role: 'unknown', qid: null, full: null,
+        source: `第 ${c + 1} 列没有列名：改成“第 ${suggestQid(c)} 题（5 分）”再传，或点“忽略此列”。`,
+        confidence: 'low', confirmed: false, ignored: false });
+      continue;
+    }
+    items.push({ col: c, header: raw, role: 'unknown', qid: null, full: null,
+      source: `第 ${c + 1} 列列名“${h}”认不出来：改成“第 ${suggestQid(c)} 题（5 分）”再传，或点“忽略此列”。`,
+      confidence: 'low', confirmed: false, ignored: false });
+  }
+  return recognitionSummary(items, qCols.length > 0);
+}
+// B2.1 长表识别（纯函数）：长表格式固定（student,question,skill,score[,full]），
+// 每列认作固定角色，全部直接过；题目列的满分另由题目行列出（见 loadLongTableText）。
+function recognizeLongTable(header) {
+  const defs = [
+    { role: 'id', label: '学号', source: '长表格式：第 1 列是学号' },
+    { role: 'question-col', label: '题号', source: '长表格式：第 2 列是题号' },
+    { role: 'skill', label: '知识点', source: '长表格式：第 3 列是知识点编号' },
+    { role: 'score', label: '得分', source: '长表格式：第 4 列是得分' },
+    { role: 'full', label: '满分', source: '长表格式：第 5 列是满分' },
+  ];
+  return (header || []).map((raw, c) => {
+    const d = defs[c];
+    if (!d) return { col: c, header: raw, role: 'unknown', qid: null, full: null,
+      source: `第 ${c + 1} 列“${raw}”不在长表格式里（student,question,skill,score[,full]），已跳过。`,
+      confidence: 'low', confirmed: false, ignored: false };
+    return { col: c, header: raw, role: d.role, qid: null, full: null, source: d.source, confidence: 'high', confirmed: true, ignored: false };
+  });
+}
+function recogRoleLabel(it) {
+  if (it.role === 'question') return `第 ${it.qid} 题`;
+  if (it.role === 'question-noscore') return `第 ${it.qid} 题（没得分）`;
+  if (it.role === 'id') return '学号';
+  if (it.role === 'name') return '姓名';
+  if (it.role === 'total') return '总分';
+  if (it.role === 'duplicate') return '重复列';
+  if (it.role === 'question-col') return '题号';
+  if (it.role === 'skill') return '知识点';
+  if (it.role === 'score') return '得分';
+  if (it.role === 'full') return '满分';
+  return '认不出来';
+}
+// B2：三步指示条（上传 → 确认 → 改表重传），当前走到哪一步高亮哪一步。
+function renderImportSteps(state) {
+  const el = document.getElementById('importSteps');
+  if (!el) return;
+  const steps = [['upload', '① 上传后自动识别'], ['confirm', '② 只确认拿不准的几项'], ['fix', '③ 认不出来按提示改表重传']];
+  el.innerHTML = steps.map(([k, t]) => `<li data-step="${k}"${k === state ? ' class="active"' : ''}>${t}</li>`).join('');
+}
+// B2：识别结果（原“满分确认”表升级）：每列认作什么、满分多少、
+// 从哪来的、置信度多高，全列出来；中低项要老师点一下确认或忽略。
+function renderRecognition() {
   const el = document.getElementById('fullMarksOut');
   if (!el) return;
-  if (!gradebook || !gradebook.questions || !gradebook.questions.length) { el.innerHTML = ''; return; }
-  let html = '<h3>满分确认</h3><p class="muted">每列满分是多少、从哪来的，改一列下面就重算。</p><table><caption>满分确认</caption><thead><tr><th scope="col">题号</th><th scope="col">满分</th><th scope="col">来源</th></tr></thead><tbody>';
-  gradebook.questions.forEach(q => {
-    const basis = (gradebook.qCols || []).find(c => c.qid === q.qid);
-    html += `<tr><td>第 ${q.qid} 题</td><td><input type="number" class="fm-input" min="1" step="1" value="${q.full}" data-fm-qid="${q.qid}" onchange="setFullMarks(${q.qid}, this.value)" aria-label="第 ${q.qid} 题满分"></td><td>${esc(basis && basis.basis ? basis.basis : '列名写明 ' + q.full + ' 分')}</td></tr>`;
+  if (!gradebook || !gradebook.header || !gradebook.header.length) { el.innerHTML = ''; renderImportSteps('upload'); return; }
+  // 旧草稿（B2 之前存的）没有识别结果：按表头 + 题目列重建，
+  // 认不出的列（当时没进成绩表）不再列出。
+  if (!gradebook.recognition) gradebook.recognition = recognizeColumns(gradebook.header, gradebook.qCols || [], null);
+  const rec = gradebook.recognition;
+  const pending = recogPending(rec);
+  let html = '<h3>识别结果 · 满分确认</h3><p class="muted">上传后自动认表头、题号、满分、学生列。置信度高的直接过，只确认拿不准的几项。</p>';
+  html += `<p class="muted" id="recogCounter">${rec.nNeed === 0 ? '全部自动识别，无需确认。' : `已确认 ${rec.nDone}/${rec.nNeed} 项${pending === 0 ? '，可以进下一步了。' : '，剩下的点一下确认或忽略。'}`}</p>`;
+  html += '<div class="table-scroll"><table><caption>识别结果</caption><thead><tr><th scope="col">列</th><th scope="col">认作</th><th scope="col">满分</th><th scope="col">依据 / 提示</th><th scope="col">置信度</th><th scope="col">操作</th></tr></thead><tbody>';
+  rec.items.forEach(it => {
+    const colCell = it.col >= 0 ? `第 ${it.col + 1} 列“${esc(it.header || '')}”` : `第 ${it.qid} 题（长表）`;
+    const fmCell = it.role === 'question'
+      ? `<input type="number" class="fm-input" min="1" step="1" value="${it.full}" data-fm-qid="${it.qid}" onchange="setFullMarks(${it.qid}, this.value)" aria-label="第 ${it.qid} 题满分">`
+      : '—';
+    const badge = it.confidence === 'high' ? '<span class="badge ev">高 · 直接过</span>'
+      : it.confidence === 'medium' ? '<span class="badge inf">中 · 请确认</span>'
+      : '<span class="badge warn">低 · 认不出</span>';
+    let action = '已通过';
+    if (it.confidence === 'medium') action = it.confirmed ? '已确认' : `<button class="small secondary" onclick="confirmRecognition(${it.col})">确认</button>`;
+    else if (it.confidence === 'low') action = it.ignored ? '已忽略' : `<button class="small secondary" onclick="ignoreRecognition(${it.col})">忽略此列</button>`;
+    html += `<tr><td>${colCell}</td><td>${recogRoleLabel(it)}</td><td>${fmCell}</td><td>${esc(it.source || '')}</td><td>${badge}</td><td>${action}</td></tr>`;
   });
-  html += `</tbody></table><p class="muted">按当前满分：各题平均得分率 ${fullMarksPreview()}</p>`;
+  html += '</tbody></table></div>';
+  if (gradebook.questions && gradebook.questions.length) {
+    html += `<p class="muted">按当前满分：各题平均得分率 ${fullMarksPreview()}</p>`;
+  }
+  // B2.3 兜底：认不出来的列按条给改法，改好重传；没认出题目列时直接给模板。
+  const lows = rec.items.filter(i => i.confidence === 'low' && !i.ignored);
+  if (lows.length || !rec.canProceed) {
+    html += '<div class="issue block">有列认不出来：先按下面改，改好重新上传（文件或粘贴都可以）。';
+    if (!rec.canProceed) html += '<span class="sug">这张表没认出题目列：列名要写成“第 N 题（X 分）”的样子，或下载标准模板对照。</span>';
+    lows.forEach(i => { html += `<span class="sug">${esc(i.source || '')}</span>`; });
+    html += '<span class="sug"><button class="secondary" onclick="downloadTemplate()">下载标准模板（.csv）</button></span></div>';
+  }
   el.innerHTML = html;
+  renderImportSteps(rec.failures.length ? 'fix' : 'confirm');
+}
+// B2.2：老师点“确认”——中置信度项算过；满分推断的按“老师已确认”记进列映射，
+// 下次同一张表直接过。
+function confirmRecognition(col) {
+  if (!gradebook || !gradebook.recognition) return false;
+  const it = gradebook.recognition.items.find(i => i.col === col);
+  if (!it || it.confirmed || it.ignored || it.confidence !== 'medium') return false;
+  it.confirmed = true;
+  if (it.role === 'question') {
+    const q = (gradebook.qCols || []).find(c => c.qid === it.qid);
+    if (q) { q.inferred = false; q.basis = '老师已确认 ' + q.full + ' 分'; }
+    gradebook.issues = gradebook.issues.filter(i => !(i.kind === 'inferred' && i.qid === it.qid));
+    saveColMap(rememberColMap(loadColMap(), gradebook.header || [], gradebook.qCols || []));
+  }
+  refreshRecognitionCounts();
+  renderIssues(gradebook.issues);
+  renderRecognition();
+  updateStage2Gate();
+  logAudit(`识别确认：${it.role === 'question' ? '第 ' + it.qid + ' 题满分 ' + it.full + ' 分' : recogRoleLabel(it)}`);
+  saveDraft();
+  return true;
+}
+// B2.3：老师点“忽略此列”——低置信度项算过（这列本来就不进成绩表）；
+// 重复列的提示顺手撤掉。
+function ignoreRecognition(col) {
+  if (!gradebook || !gradebook.recognition) return false;
+  const it = gradebook.recognition.items.find(i => i.col === col);
+  if (!it || it.confirmed || it.ignored || it.confidence !== 'low') return false;
+  it.ignored = true;
+  if (it.role === 'duplicate') gradebook.issues = gradebook.issues.filter(i => !(i.kind === 'dupcol' && i.qid === it.qid));
+  refreshRecognitionCounts();
+  renderIssues(gradebook.issues);
+  renderRecognition();
+  updateStage2Gate();
+  logAudit(`识别忽略：第 ${it.col + 1} 列“${it.header}”`);
+  saveDraft();
+  return true;
 }
 // 改一列满分：更新成绩表与列映射记忆，满分确认与得分率预览跟着重算，记审计。
 function setFullMarks(qid, value) {
   if (!gradebook) return false;
   const v = Number(value);
   const q = gradebook.questions.find(x => x.qid === qid);
-  if (!q || isNaN(v) || v <= 0) { toast('满分要是大于 0 的数字。'); renderFullMarks(); return false; }
+  if (!q || isNaN(v) || v <= 0) { toast('满分要是大于 0 的数字。'); renderRecognition(); return false; }
   const old = q.full;
   q.full = v;
   (gradebook.qCols || []).forEach(c => {
@@ -3963,9 +4683,15 @@ function setFullMarks(qid, value) {
   });
   // 满分推断的提示过期了，撤掉（A2）；其余提示不动。
   gradebook.issues = gradebook.issues.filter(i => !(i.kind === 'inferred' && i.qid === qid));
+  // B2：改满分也算确认这列（推断的按老师改的记进列映射）。
+  if (gradebook.recognition) {
+    const it = gradebook.recognition.items.find(i => i.role === 'question' && i.qid === qid);
+    if (it) { it.full = v; it.source = '老师改成 ' + v + ' 分'; it.confidence = 'high'; it.confirmed = true; }
+    refreshRecognitionCounts();
+  }
   saveColMap(rememberColMap(loadColMap(), gradebook.header || [], gradebook.qCols || []));
   renderIssues(gradebook.issues);
-  renderFullMarks();
+  renderRecognition();
   logAudit(`第 ${qid} 题满分改成 ${v} 分（原来 ${old} 分），已重算`);
   saveDraft();
   return true;
@@ -4017,6 +4743,11 @@ function loadLongTableText(text, label) {
   const questions = Object.keys(qFull).map(Number).sort((a, b) => a - b).map(qid => ({ qid, full: qFull[qid] }));
   const qCols = questions.map(q => ({ col: -1, qid: q.qid, full: q.full, inferred: false, basis: '长表：满分 ' + q.full + ' 分' }));
   gradebook = { students: Object.values(studentsMap), questions, qCols, header: ['学号', '姓名'].concat(questions.map(q => `第${q.qid}题（${q.full}分）`)), issues, templateKC: kcFromLong, templateAnswers: {} };
+  // B2：长表按固定格式认列（学号/题号/知识点/得分/满分），题目列的满分另列一行可改。
+  const longHeader = (lines[0] || '').split(',').map(x => x.trim());
+  const schemaItems = recognizeLongTable(longHeader);
+  const qItems = qCols.map(q => ({ col: -1, header: `第${q.qid}题（${q.full}分）`, role: 'question', qid: q.qid, full: q.full, source: q.basis, confidence: 'high', confirmed: true, ignored: false }));
+  gradebook.recognition = recognitionSummary(schemaItems.concat(qItems), questions.length > 0);
   kcMap = kcFromLong;
   setTagMetaFromMap(kcFromLong, '对应表');
   document.getElementById('kcMsg').innerHTML = `对应关系已从长表里取到：${Object.keys(kcFromLong).length} 道题有知识点。`;
@@ -4030,9 +4761,10 @@ function loadGradebookText(text, label) {
   const first = (text.split(/\r?\n/)[0] || '').toLowerCase();
   if (first.includes('student')) { loadLongTableText(text, label); return; }
   const colMap = loadColMap();
-  gradebook = parseWideGradebook(text, colMap);
+  const grid = parseCSVText(text);
+  gradebook = parseWideGradebookGrid(grid, colMap);
   saveColMap(rememberColMap(colMap, gradebook.header || [], gradebook.qCols || []));
-  applyGradebook(gradebook, label);
+  applyGradebook(gradebook, label, grid);
   applyTemplateKC();
 }
 // 成绩表自带的“知识点”行（A4）：文件自己的对应关系优先，直接当作 kcMap。
@@ -4089,7 +4821,7 @@ function loadPastedTable(text) {
   const colMap = loadColMap();
   gradebook = parseWideGradebookGrid(pasted.grid, colMap);
   saveColMap(rememberColMap(colMap, gradebook.header || [], gradebook.qCols || []));
-  applyGradebook(gradebook, '粘贴成绩表');
+  applyGradebook(gradebook, '粘贴成绩表', pasted.grid);
   applyTemplateKC();
 }
 document.getElementById('pasteBtn').addEventListener('click', () => {
@@ -4121,7 +4853,23 @@ function loadGradebookFile(file) {
 }
 document.getElementById('gradeFile').addEventListener('change', e => {
   const f = e.target.files[0];
-  if (f) loadGradebookFile(f);
+  if (f) { showDropFileName('gradeFileName', f); loadGradebookFile(f); }
+});
+// UX-2：原生文件框藏起来，中文按钮点选；文件名显示在按钮下面，老师知道选了哪个文件。
+function showDropFileName(id, f) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = '已选 ' + f.name + '。';
+}
+document.getElementById('gradePickBtn').addEventListener('click', e => {
+  if (e.stopPropagation) e.stopPropagation();
+  document.getElementById('gradeFile').click();
+});
+document.getElementById('paperPickBtn').addEventListener('click', e => {
+  if (e.stopPropagation) e.stopPropagation();
+  document.getElementById('paperFile').click();
+});
+document.getElementById('kcPickBtn').addEventListener('click', () => {
+  document.getElementById('kcFile').click();
 });
 // B1.3：加载演示示例（成绩表 + 对应表 + 6 条示例错卷），成绩表、对应表、错卷
 // 全套进示例；空白格按缺考处理（演示卷只有 S17 第 4 题一个空格）。
@@ -4148,13 +4896,18 @@ function loadDemoExample() {
 document.getElementById('demoBtn').addEventListener('click', () => { loadDemoExample(); });
 document.getElementById('toStage2').addEventListener('click', () => {
   if (blankState.total > 0 && !blankState.handled) { toast('表里还有空白格没处理：先点“全部按缺考处理”或“全部补 0 分”。'); return; }
-  show('stage2'); setStep(2);
+  if (recogPending(gradebook && gradebook.recognition) > 0) { toast('识别结果还有没确认的项：先在上面“识别结果”里确认或忽略，再进下一步。'); return; }
+  maxStep = Math.max(maxStep, 2);
+  goToStep(2);
+  renderLiveFeedback();
   saveDraft();
   logAudit('确认成绩表，进入试卷处理');
+  toast('第 1 步已确认，已进入第 2 步。');
 });
 document.getElementById('kcFile').addEventListener('change', e => {
   const f = e.target.files[0];
   if (!f) return;
+  showDropFileName('kcFileName', f);
   const rd = new FileReader();
   rd.onload = () => {
     const kc = parseKCMap(rd.result);
@@ -4166,6 +4919,7 @@ document.getElementById('kcFile').addEventListener('change', e => {
     document.getElementById('toStage3').disabled = Object.keys(kcMap).length === 0;
     logAudit(`载入题目与知识点对应表：${Object.keys(kcMap).length} 道题`);
     refreshCuojuanSkills();
+    renderLiveFeedback();
     saveDraft();
   };
   rd.readAsText(f);
@@ -4181,6 +4935,7 @@ document.getElementById('cjAddBtn').addEventListener('click', () => {
   document.getElementById('cjMsg').textContent = `已记第 ${qid} 题的典型错卷。`;
   document.getElementById('cjTypical').value = '';
   logAudit(`记典型错卷：第 ${qid} 题`);
+  renderLiveFeedback();
   saveDraft();
 });
 // 典型错卷：粘贴改卷笔记，每行一条，按行解析
@@ -4203,6 +4958,7 @@ document.getElementById('cjParseBtn').addEventListener('click', () => {
     (unclassified ? `，其中 ${unclassified} 条错因没归上类，请在上面表里逐条确认` : '') +
     (cjUnparsed.length ? `；${cjUnparsed.length} 行没解析出来，列在下面，请手工补或忽略` : '') + '。';
   logAudit(`解析改卷笔记：${res.notes.length} 条典型错卷，${res.skipped.length} 行跳过`);
+  renderLiveFeedback();
   saveDraft();
 });
 
@@ -4221,7 +4977,7 @@ function selectPaperFile(f) {
 }
 document.getElementById('paperFile').addEventListener('change', e => {
   const f = e.target.files[0];
-  if (f) selectPaperFile(f);
+  if (f) { showDropFileName('paperFileName', f); selectPaperFile(f); }
 });
 function wireDropzone(zoneId, inputId, onFile) {
   const zone = document.getElementById(zoneId);
@@ -4238,10 +4994,11 @@ function wireDropzone(zoneId, inputId, onFile) {
     const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
     if (f) onFile(f);
   });
-  zone.addEventListener('click', e => { if (e.target !== input) input.click(); });
+  // UX-2：点拖放区空白处打开文件选择；点里面的中文按钮时按钮自己处理，不重复触发。
+  zone.addEventListener('click', e => { if (e.target !== input && !(e.target.closest && e.target.closest('button'))) input.click(); });
 }
-wireDropzone('gradeDrop', 'gradeFile', f => loadGradebookFile(f));
-wireDropzone('paperDrop', 'paperFile', f => selectPaperFile(f));
+wireDropzone('gradeDrop', 'gradeFile', f => { showDropFileName('gradeFileName', f); loadGradebookFile(f); });
+wireDropzone('paperDrop', 'paperFile', f => { showDropFileName('paperFileName', f); selectPaperFile(f); });
 function ocrItemsToText(items) {
   const sorted = items.slice().sort((a, b) => {
     const ay = Math.min(...a.poly.map(p => p.y)), by = Math.min(...b.poly.map(p => p.y));
@@ -4314,7 +5071,7 @@ document.getElementById('splitBtn').addEventListener('click', () => {
   const text = document.getElementById('ocrText').value;
   const qs = splitQuestions(text);
   if (!qs.length) { document.getElementById('splitOut').innerHTML = '<p class="muted">没按题号拆出题目：请确认文字里有“1.”“第 1 题”这样的题号，或者直接用办法一上传对应表。</p>'; return; }
-  let html = '<p class="muted">按题号拆出 ' + qs.length + ' 道题，知识点编号请逐题填（高中库 1001–1085，或旧编号 1–123），也可以点输入框从下拉里选知识点名称；填完点下面“用这份对应关系”。也可以先点“自动标注知识点”，按题干关键词预填；或者点“智能标注（LLM）”，用你自己的 Key 调模型来标，调不通时自动改用关键词标注。置信度低的请老师逐题确认。高错题还可以在“典型错法”里补一句学生常错的样子、选一个错因，诊断和提纲里会用上，不填也不影响。</p><table><caption>拆题结果</caption><thead><tr><th scope="col">题号</th><th scope="col">题干</th><th scope="col">知识点编号</th><th scope="col">自动标注</th><th scope="col">典型错法</th><th scope="col">错因</th></tr></thead><tbody>';
+  let html = '<p class="muted">按题号拆出 ' + qs.length + ' 道题，知识点编号请逐题填（高中库 1001–1085，或旧编号 1–123），也可以点输入框从下拉里选知识点名称；填完点下面“用这份对应关系”。也可以先点“自动标注知识点”，按题干关键词预填；或者点“智能标注”，用你自己的密钥调模型来标，调不通时自动改用关键词标注。置信度低的请老师逐题确认。高错题还可以在“典型错法”里补一句学生常错的样子、选一个错因，诊断和提纲里会用上，不填也不影响。</p><table><caption>拆题结果</caption><thead><tr><th scope="col">题号</th><th scope="col">题干</th><th scope="col">知识点编号</th><th scope="col">自动标注</th><th scope="col">典型错法</th><th scope="col">错因</th></tr></thead><tbody>';
   qs.forEach((q, i) => {
     html += `<tr><td>${q.qid}</td><td>${esc(q.stem.slice(0, 60))}</td><td><input type="text" list="kcDatalist" data-qi="${i}" style="width:110px" placeholder="如 1074" aria-label="第 ${q.qid} 题知识点编号"></td><td><span data-tag-qi="${i}"></span></td><td><input type="text" data-cj-qi="${i}" style="width:150px" placeholder="如：把长轴当作焦距" aria-label="第 ${q.qid} 题典型错法"></td><td><select data-cause-qi="${i}" aria-label="第 ${q.qid} 题错因分类">${cuojuanCauseOptions('')}</select></td></tr>`;
   });
@@ -4325,19 +5082,22 @@ document.getElementById('splitBtn').addEventListener('click', () => {
   } catch (err) {}
   html += '</tbody></table><datalist id="kcDatalist">' + kcOpts.join('') + '</datalist>';
   const attr = v => esc(String(v || '')).replace(/"/g, '&quot;');
-  html += '</tbody></table><p><button id="autoTagBtn" class="secondary">自动标注知识点</button> <button id="llmTagBtn" class="secondary">智能标注（LLM）</button> <button id="applySplitBtn" class="secondary">用这份对应关系</button></p>';
+  html += '</tbody></table><p><button id="autoTagBtn" class="secondary">自动标注知识点</button> <button id="llmTagBtn" class="secondary">智能标注</button> <button id="applySplitBtn" class="secondary">用这份对应关系</button></p>';
   html += '<div id="lowConfOut"></div>';
-  html += '<div class="llm-settings"><p class="muted">智能标注用你自己的 Key 调模型（默认凌云 API），Key 只存在这台浏览器里，不会上传到别处。调不通时自动改用关键词标注。</p>' +
-    `<p><label>接口地址 <input type="text" id="llmBaseUrl" value="${attr(llmSettings.baseUrl)}" aria-label="LLM 接口地址" style="width:250px"></label> ` +
-    `<label>模型 <input type="text" id="llmModel" value="${attr(llmSettings.model)}" aria-label="LLM 模型" style="width:280px"></label></p>` +
-    `<p><label>API Key <input type="password" id="llmKey" value="${attr(llmSettings.apiKey)}" aria-label="LLM API Key" style="width:280px" autocomplete="off"></label> ` +
+  html += '<div class="llm-settings"><p class="muted">智能标注用你自己的密钥调模型（默认凌云接口），密钥只存在这台浏览器里，不会上传到别处。调不通时自动改用关键词标注。</p>' +
+    `<p><label>接口地址 <input type="text" id="llmBaseUrl" value="${attr(llmSettings.baseUrl)}" aria-label="智能标注接口地址" style="width:250px"></label> ` +
+    `<label>模型 <input type="text" id="llmModel" value="${attr(llmSettings.model)}" aria-label="智能标注模型" style="width:280px"></label></p>` +
+    `<p><label>密钥 <input type="password" id="llmKey" value="${attr(llmSettings.apiKey)}" aria-label="智能标注密钥" style="width:280px" autocomplete="off"></label> ` +
     '<span id="llmStatus" class="muted"></span></p></div>';
   document.getElementById('splitOut').innerHTML = html;
   // 重新拆题，低置信度清单跟着清掉（旧清单对应的是上一份拆题结果）。
   lowConfList = [];
-  // 拆题表里直接改编号：低置信度清单里这道题自动确认（A7）。
+  splitQs = qs;
+  // 拆题表里直接改编号：低置信度清单里这道题自动确认（A7）；改一处编号，
+  // 下面的即时结论马上重算（B3.1，input 事件比 change 更早，边打字边变）。
   document.querySelectorAll('#splitOut input[data-qi]').forEach(inp => {
     inp.addEventListener('change', () => markLowConfConfirmed(qs[+inp.dataset.qi].qid));
+    inp.addEventListener('input', () => renderLiveFeedback());
   });
   document.getElementById('applySplitBtn').addEventListener('click', () => {
     const map = {};
@@ -4348,12 +5108,12 @@ document.getElementById('splitBtn').addEventListener('click', () => {
     });
     if (!Object.keys(map).length) { document.getElementById('kcMsg').innerHTML = '还没填知识点编号。'; return; }
     kcMap = map;
-    // 标注来源记下来：自动标的且没改过的保持原来源（LLM/关键词），改过或手填的记“老师确认”。
+    // 标注来源记下来：自动标的且没改过的保持原来源（LLM/关键词），改过或手填的记“老师确认”，AI 原判留着（B5）。
     Object.keys(map).forEach(qid => {
       const v = map[qid];
       const prev = tagMeta[qid];
       if (prev && prev.skill === v) return;
-      tagMeta[qid] = { skill: v, source: '老师确认', confidence: null };
+      recordTeacherOverride(qid, v, '老师确认');
     });
     // 拆题表里补的典型错法和错因一起收进来，落到上面刚确认的知识点上。
     let nCj = 0;
@@ -4370,6 +5130,7 @@ document.getElementById('splitBtn').addEventListener('click', () => {
       (nCj ? `其中 ${nCj} 道题记了典型错卷。` : '');
     document.getElementById('toStage3').disabled = false;
     logAudit(`OCR 拆题并确认对应关系：${Object.keys(map).length} 道题${nCj ? `，${nCj} 条典型错卷` : ''}`);
+    renderLiveFeedback();
     saveDraft();
   });
   document.getElementById('autoTagBtn').addEventListener('click', () => runKeywordTag(qs));
@@ -4380,10 +5141,10 @@ document.getElementById('splitBtn').addEventListener('click', () => {
   document.getElementById('llmTagBtn').addEventListener('click', async () => {
     const btn = document.getElementById('llmTagBtn');
     const statusEl = document.getElementById('llmStatus');
-    if (!window.__llmTagger) { if (statusEl) statusEl.textContent = 'LLM 标注模块没加载上，请刷新页面再试。'; return; }
+    if (!window.__llmTagger) { if (statusEl) statusEl.textContent = '智能标注模块没加载上，请刷新页面再试。'; return; }
     const s = readLLMSettingsFromForm();
     saveLLMSettings(s);
-    if (!s.apiKey) { if (statusEl) statusEl.textContent = '请先填 API Key（只存在这台浏览器里，不会上传到别处）。'; return; }
+    if (!s.apiKey) { if (statusEl) statusEl.textContent = '请先填密钥（只存在这台浏览器里，不会上传到别处）。'; return; }
     if (!s.model) { if (statusEl) statusEl.textContent = '请先填模型。'; return; }
     if (typeof fetch === 'undefined') { if (statusEl) statusEl.textContent = '这台浏览器调不通网络接口。'; return; }
     btn.disabled = true;
@@ -4401,7 +5162,7 @@ document.getElementById('splitBtn').addEventListener('click', () => {
       renderLowConfList();
       const errNote = res.errors.length ? `（${res.errors.length} 条提示：${res.errors[0]}）` : '';
       document.getElementById('kcMsg').innerHTML = `智能标注完成：${r.filled} 道题已预填知识点，${r.low} 道置信度低或没标上，请逐题确认后再点“用这份对应关系”。${errNote}`;
-      logAudit(`智能标注（LLM）：预填 ${r.filled} 道，${r.low} 道待确认`);
+      logAudit(`智能标注：预填 ${r.filled} 道，${r.low} 道待确认`);
       if (statusEl) statusEl.textContent = res.errors.length ? '部分批次用了关键词补位，见上面提示。' : '标注完成。';
     } catch (e) {
       if (statusEl) statusEl.textContent = '标注失败：' + (e.message || e) + '。已改用关键词标注。';
@@ -4415,17 +5176,25 @@ document.getElementById('splitBtn').addEventListener('click', () => {
 // renderStats(st, norm) 单独抽出来，测试直接调，不用点按钮。
 function renderStats(st, norm) {
   const sum = buildSummary(st);
-  let html = `<div class="kpi-row">` + sum.map(k => `<div class="kpi"><b>${k.value}</b><span>${k.label}</span></div>`).join('') + `</div>`;
+  // B4：第一层 · 按题。层切换条在统计页和诊断页顶部都有一份，点一下切层。
+  let html = reportLayerTabsHtml('question');
+  html += `<div class="kpi-row">` + sum.map(k => `<div class="kpi"><b>${k.value}</b><span>${k.label}</span></div>`).join('') + `</div>`;
   html += `<p>学生 ${st.nStudents} 人 · 题目 ${st.nQuestions} 道 · 作答 ${st.nRows} 条 · 整体正确率 ${(st.fullRate * 100).toFixed(1)}% · 平均得分率 ${(st.acc * 100).toFixed(1)}%` +
     (norm.skippedNoKC ? ` · ${norm.skippedNoKC} 条作答没有知识点对应关系，已跳过` : '') +
     (norm.skippedNoSlot ? ` · ${norm.skippedNoSlot} 条作答的知识点超出诊断容量，已跳过` : '') +
     (norm.skippedBlank ? ` · ${norm.skippedBlank} 个空格已跳过` : '') + '</p>';
-  html += `<p class="muted">口径：整体正确率 = 得满分的作答 ÷ 全部作答；平均得分率 = 每道题得分 ÷ 满分的均值（4/5 分算 0.8，满分算 1，0 分算 0）；每题“正确率”= 该题得满分的人 ÷ 做过这道题的人；每题“平均得分率”= 该题得分 ÷ 满分的均值。空白格不算 0 分，按缺考处理。</p>`;
-  html += `<h3>每题正确率（从低到高）</h3><p class="muted">点“看分布”看这道题全班的得分分布：满分、部分得分、0 分各多少人。</p><table><caption>每题正确率</caption><thead><tr><th scope="col">题号</th><th scope="col">知识点</th><th scope="col" class="num">做过人数</th><th scope="col" class="num">正确率</th><th scope="col" class="num">平均得分率</th><th scope="col">得分分布</th></tr></thead><tbody>`;
+  html += `<p class="muted">口径：整体正确率 = 得满分的作答 ÷ 全部作答；平均得分率 = 每道题得分 ÷ 满分的均值（4/5 分算 0.8，满分算 1，0 分算 0）；每题“正确率”= 该题得满分的人 ÷ 做过这道题的人；每题“平均得分率”= 该题得分 ÷ 满分的均值。空白格不算 0 分，按缺考处理。选项分布要选项数据才有，成绩表里只有得分，给的是得分分布（满分/部分得分/0 分各多少人），不编选项。</p>`;
+  html += `<h3>每题正确率（从低到高）</h3><p class="muted">点“看分布”看这道题全班的得分分布：满分、部分得分、0 分各多少人。典型错法和错因是老师在第 2 步记的错卷；点题号旁的链接能回第 2 步看这道题的即时结论，或回按知识点层看这个知识点。</p><table><caption>每题正确率</caption><thead><tr><th scope="col">题号</th><th scope="col">知识点</th><th scope="col" class="num">做过人数</th><th scope="col" class="num">正确率</th><th scope="col" class="num">平均得分率</th><th scope="col">得分分布</th><th scope="col">典型错法 · 错因</th></tr></thead><tbody>`;
   st.byQ.forEach(x => {
     const d = scoreDistribution(rows, x.q);
-    html += `<tr><td>第 ${x.q} 题</td><td>${kcMap[x.q] || '—'} 号</td><td class="num">${x.n}</td><td class="num">${(x.fullRate * 100).toFixed(0)}%</td><td class="num">${(x.acc * 100).toFixed(0)}%</td><td><button class="small ghost" data-qdist="${x.q}" onclick="toggleQDist(${x.q})">看分布</button></td></tr>`;
-    html += `<tr class="dist-row hidden" id="qdist-${x.q}"><td colspan="6">满分 ${d.full} 人 · 部分得分 ${d.partial} 人 · 0 分 ${d.zero} 人 · 平均得分率 ${(d.avg * 100).toFixed(0)}%` +
+    const cjLines = cuojuanLinesForQuestions([+x.q]);
+    const skillId = kcMap[x.q];
+    const slot = skillId ? slotForSkillId(skillId) : null;
+    const kcCell = skillId
+      ? `${skillId} 号` + (slot === null ? '' : ` <button class="small ghost" onclick="goToReportSource('kc', ${slot})">回按知识点层</button>`)
+      : '—';
+    html += `<tr id="qrow-${x.q}"><td>第 ${x.q} 题 <button class="small ghost" onclick="goToStep(2); flashRow('lfb-${x.q}')">回第 2 步</button></td><td>${kcCell}</td><td class="num">${x.n}</td><td class="num">${(x.fullRate * 100).toFixed(0)}%</td><td class="num">${(x.acc * 100).toFixed(0)}%</td><td><button class="small ghost" data-qdist="${x.q}" onclick="toggleQDist(${x.q})">看分布</button></td><td>${cjLines.length ? cjLines.join('<br>') : '<span class="muted">没记错卷</span>'}</td></tr>`;
+    html += `<tr class="dist-row hidden" id="qdist-${x.q}"><td colspan="7">满分 ${d.full} 人 · 部分得分 ${d.partial} 人 · 0 分 ${d.zero} 人 · 平均得分率 ${(d.avg * 100).toFixed(0)}%` +
       `<div class="tier-bar" role="img" aria-label="第 ${x.q} 题得分分布：满分 ${d.full} 人，部分得分 ${d.partial} 人，0 分 ${d.zero} 人"><i class="seg strong" style="width:${d.n ? (d.full / d.n * 100).toFixed(1) : 0}%"></i><i class="seg mid" style="width:${d.n ? (d.partial / d.n * 100).toFixed(1) : 0}%"></i><i class="seg weak" style="width:${d.n ? (d.zero / d.n * 100).toFixed(1) : 0}%"></i></div></td></tr>`;
   });
   html += `</tbody></table><h3>每知识点得分率</h3><p class="muted">得分率 = 该知识点上得分 ÷ 满分的均值；作答数是这知识点上被考到的总人次。</p><table><caption>每知识点得分率</caption><thead><tr><th scope="col">知识点</th><th scope="col" class="num">作答数</th><th scope="col" class="num">得分率</th><th scope="col"></th></tr></thead><tbody>`;
@@ -4450,16 +5219,21 @@ document.getElementById('toStage3').addEventListener('click', () => {
   const st = computeStats(rows);
   renderStats(st, norm);
   if (kcMap) recordUploadSkills([...new Set(Object.values(kcMap))]);
-  show('stage3'); setStep(3);
+  maxStep = Math.max(maxStep, 3);
+  goToStep(3);
   saveDraft();
   logAudit('确认试卷，进入统计');
+  toast('第 2 步已确认，已进入第 3 步。');
 });
 document.getElementById('toStage4').addEventListener('click', () => {
   diagnosis = diagnoseClass(rows);
+  reportLayer = 'kc';   // B4：确认统计进诊断时回到默认的按知识点层（上次看的是按群体层也不留着）
   renderDiagnosis();
-  show('stage4'); setStep(4);
+  maxStep = Math.max(maxStep, 4);
+  goToStep(4);
   saveDraft();
   logAudit('确认统计，进入诊断');
+  toast('第 3 步已确认，已进入第 4 步。');
 });
 // 某条知识点结论来自哪几道题、每道题是谁标的、置信度多少（A10）。
 // source 是“LLM / 关键词 / 对应表 / 老师确认 / 老师改过 / 未标上”，没记过来源的
@@ -4475,7 +5249,8 @@ function traceForSkill(s) {
       return {
         qid: q, skill: (m.skill === undefined || m.skill === null) ? kcMap[q] : m.skill,
         source: m.source || '对应表',
-        confidence: (m.confidence === undefined || m.confidence === null) ? null : m.confidence
+        confidence: (m.confidence === undefined || m.confidence === null) ? null : m.confidence,
+        original: m.original || null
       };
     });
 }
@@ -4499,7 +5274,7 @@ window.changeQuestionSkill = function (qid, value) {
   const old = kcMap[qid];
   if (v === old) return true;
   kcMap[qid] = v;
-  tagMeta[qid] = { skill: v, source: '老师改过', confidence: null };
+  recordTeacherOverride(qid, v, '老师改过');
   recomputeDiagnosis();
   renderDiagnosis();
   logAudit(`改第 ${qid} 题知识点：${old} 号 → ${v} 号，诊断已重算`);
@@ -4514,6 +5289,8 @@ function renderDiagnosis() {
   const pct = n => (total ? (n / total * 100).toFixed(1) : 0);
   // A12：结论先给一句话（规则生成），表格在下面当证据。
   let html = `<p class="diag-summary"><b>结论：</b>${esc(diagnosisSummary(diagnosis))}</p>`;
+  // B5：诊断页原则文案——诊断是参考，老师说了算；原判和改动都有地方查。
+  html += `<p class="trust-note">诊断是机器按本次考试算的参考，老师说了算：每道题的知识点能改，改完诊断重算；机器原来标的什么，点“查看来源”能看到；改了什么，页面底部的操作记录里有。</p>`;
   html += `<div class="tier-bar" role="img" aria-label="本次考到的知识点掌握度分层：较好 ${tiers['强']} 个，中等 ${tiers['中']} 个，偏弱 ${tiers['弱']} 个">
     <i class="seg strong" style="width:${pct(tiers['强'])}%"></i><i class="seg mid" style="width:${pct(tiers['中'])}%"></i><i class="seg weak" style="width:${pct(tiers['弱'])}%"></i>
   </div>
@@ -4522,43 +5299,82 @@ function renderDiagnosis() {
     <span><i class="dot mid"></i>中等（0.5–0.7）：<b>${tiers['中']}</b> 个知识点</span>
     <span><i class="dot weak"></i>偏弱（&lt;0.5）：<b>${tiers['弱']}</b> 个知识点</span>
   </div><p class="muted">只数本次考到 3 人次以上的 ${total} 个知识点；没考到的知识点不算进分层。</p>`;
+  // B4：三层报告的层切换条（第二层在诊断页，第三层也在诊断页，是两块面板）。
+  html += reportLayerTabsHtml(reportLayer === 'group' ? 'group' : 'kc');
   // 先列考到过的知识点（按掌握度从低到高），再补没考到的推断项：只按掌握度排，
   // 一张只有 5 个知识点的卷子会把 15 行全让给没考到的推断项，老师看不到考过的诊断。
   // 演示不受影响（考过的 92/48 本来就在前 15 行里）。
-  const tableRows = [...order.filter(s => testedN[s] >= 3), ...order.filter(s => testedN[s] < 3)].slice(0, 15);
-  html += `<table><caption>知识点掌握度（考到过的在前）</caption><thead><tr><th scope="col">知识点</th><th scope="col" class="num">掌握度</th><th scope="col"></th><th scope="col">证据</th><th scope="col" class="num">本次得分率</th><th scope="col">错得最多的题</th><th scope="col">来源</th></tr></thead><tbody>`;
-  tableRows.forEach(s => {
-    const ev = testedN[s] >= 3;
-    const topQEntries = Object.entries(missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
-    const topQ = topQEntries.length ? topQEntries.map(([q, n]) => `第 ${q} 题（${n}人错）`).join('、') : '—';
-    // 典型错卷进高错题错因分析：记了错卷的题，在错题后面多一行典型错法和错因。
-    const cjLines = cuojuanLinesForQuestions(topQEntries.map(([q]) => q));
-    // 标注来源可追溯（A10）：点“查看来源”展开这条结论来自哪几道题、每道题是谁标的、
-    // 置信度多少；编号可以直接改，改完诊断自动重算。
-    const trace = traceForSkill(s);
-    const traceCell = trace.length
-      ? `<button class="small ghost" onclick="toggleTrace(${s})">查看来源</button>`
-      : '—';
-    html += `<tr><td>${skillLabel(s)}</td><td class="num">${mastery[s].toFixed(2)}</td>
+  const matrix = buildKcMatrix(diagnosis);
+  // B4：矩阵按章节分组，组按教材里的章节顺序排（演示库没分章节，归到“未分章节”最后）；
+  // 组内还是掌握度从低到高。
+  const bankPts = examBankPoints() || [];
+  const chapterOrder = [];
+  bankPts.forEach(e => { if (e.chapter && chapterOrder.indexOf(e.chapter) < 0) chapterOrder.push(e.chapter); });
+  const kcGroups = [];
+  matrix.forEach(m => {
+    const key = m.chapter || '未分章节';
+    let g = kcGroups.find(x => x.key === key);
+    if (!g) { g = { key, rows: [] }; kcGroups.push(g); }
+    g.rows.push(m);
+  });
+  kcGroups.sort((a, b) => {
+    const ia = a.key === '未分章节' ? 9999 : chapterOrder.indexOf(a.key);
+    const ib = b.key === '未分章节' ? 9999 : chapterOrder.indexOf(b.key);
+    return (ia < 0 ? 9998 : ia) - (ib < 0 ? 9998 : ib);
+  });
+  html += `<div id="kcPanel" class="${reportLayer === 'group' ? 'hidden' : ''}"><h3>第二层 · 按知识点 · 掌握度矩阵</h3><p class="muted">行是知识点，列是掌握度与本次得分率；同一章的排在一起，组内按掌握度从低到高，最弱的在前面。点“回按题层”回到第 3 步看这个知识点考了哪几道题。</p>`;
+  html += `<table><caption>知识点掌握度矩阵（考到过的在前）</caption><thead><tr><th scope="col">知识点</th><th scope="col" class="num">掌握度</th><th scope="col"></th><th scope="col">证据</th><th scope="col" class="num">本次得分率</th><th scope="col">错得最多的题</th><th scope="col">来源</th></tr></thead><tbody>`;
+  kcGroups.forEach(g => {
+    html += `<tr class="chapter-row"><td colspan="7">${esc(g.key)}</td></tr>`;
+    g.rows.forEach(m => {
+      const s = m.s;
+      const ev = testedN[s] >= 3;
+      const topQEntries = Object.entries(missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      const topQ = topQEntries.length ? topQEntries.map(([q, n]) => `第 ${q} 题（${n}人错）`).join('、') : '—';
+      const cjLines = cuojuanLinesForQuestions(topQEntries.map(([q]) => q));
+      const trace = traceForSkill(s);
+      const traceCell = trace.length
+        ? `<button class="small ghost" onclick="toggleTrace(${s})">查看来源</button>`
+        : '—';
+      const backBtn = topQEntries.length ? ` <button class="small ghost" onclick="goToReportSource('question', ${topQEntries[0][0]})">回按题层</button>` : '';
+      html += `<tr id="kcrow-${s}"><td>${skillLabel(s)}</td><td class="num">${mastery[s].toFixed(2)}</td>
       <td><div class="bar"><i style="width:${Math.round(mastery[s] * 100)}%"></i></div></td>
       <td><span class="badge ${ev ? 'ev' : 'inf'}">${ev ? '有证据' : '推断'}</span> ${testedN[s] ? (testedN[s] | 0) + ' 人次' : '本次未考'}</td>
       <td class="num">${testedN[s] ? (testedC[s] / testedN[s] * 100).toFixed(0) + '%' : '未考'}</td>
-      <td>${topQ}${cjLines.length ? '<br>' + cjLines.join('<br>') : ''}</td>
+      <td>${topQ}${backBtn}${cjLines.length ? '<br>' + cjLines.join('<br>') : ''}</td>
       <td>${traceCell}</td></tr>`;
-    if (trace.length) {
-      html += `<tr class="trace-row hidden" id="trace-${s}"><td colspan="7"><p class="muted">这条结论来自下面 ${trace.length} 道题（编号可以直接改，改完诊断自动重算，改动记进操作记录）：</p>` +
-        trace.map(t => `<p>第 ${t.qid} 题 · ${t.skill} 号 · 来源：${esc(t.source)}${t.confidence === null ? '' : ' · 置信度 ' + t.confidence.toFixed(2)} · 改知识点：<input type="text" list="kcDatalist" value="${t.skill}" data-trace-qid="${t.qid}" style="width:90px" aria-label="第 ${t.qid} 题改知识点编号" onchange="changeQuestionSkill(${t.qid}, this.value)"></p>`).join('') +
-        `</td></tr>`;
-    }
+      if (trace.length) {
+        html += `<tr class="trace-row hidden" id="trace-${s}"><td colspan="7"><p class="muted">这条结论来自下面 ${trace.length} 道题（编号可以直接改，改完诊断自动重算，改动记进操作记录）：</p>` +
+          trace.map(t => `<p>第 ${t.qid} 题 · ${t.skill} 号 · 来源：${esc(t.source)}${t.confidence === null ? '' : ' · 置信度 ' + t.confidence.toFixed(2)}${t.original ? ' · 原判：' + esc(t.original.source) + ' ' + t.original.skill + ' 号' + ((t.original.confidence === null || t.original.confidence === undefined) ? '' : '（置信度 ' + t.original.confidence.toFixed(2) + '）') : ''} · 改知识点：<input type="text" list="kcDatalist" value="${t.skill}" data-trace-qid="${t.qid}" style="width:90px" aria-label="第 ${t.qid} 题改知识点编号" onchange="changeQuestionSkill(${t.qid}, this.value)"></p>`).join('') +
+          `</td></tr>`;
+      }
+    });
   });
   html += `</tbody></table><p class="muted">先列考到过的知识点（按掌握度从低到高，最多 15 个），再补没考到的推断项。推断项本次考试没考到，讲评时只作“下次覆盖”的参考。` +
     (Object.keys(cuojuan).length ? `本次记了 ${Object.keys(cuojuan).length} 条典型错卷，标在上面错得最多的题后面；错因没归上类的请回第 2 步改。` : '') + `</p>`;
   // A21：诊断页页脚显示本次用的 KC 库学科与版本。
-  html += `<p class="muted">${bankLineText()}</p>`;
-  const weakTested = order.filter(s => testedN[s] >= 3).slice(0, 5);
-  if (weakTested.length) {
-    html += `<h3>学生分组（按最弱知识点掌握度）</h3><div id="groupOut"></div>`;
+  html += `<p class="muted">${bankLineText()}</p></div>`;
+  // B4：第三层 · 按群体——共性错因、学生分组、临界生提醒。
+  const fbAll = buildQuestionFeedback(rows, kcMap, cuojuan);
+  const cc = commonCauses(cuojuan, fbAll);
+  const bl = borderlineStudents(gradebook, 0.6, 3);
+  html += `<div id="groupPanel" class="${reportLayer === 'group' ? '' : 'hidden'}"><h3>第三层 · 按群体</h3>`;
+  html += `<h4>全班卡在哪</h4>`;
+  if (cc.byCause.length) {
+    html += `<p>错因按记的错卷条数排（没记错卷的题没有错因，不硬归一类）：</p><p>` +
+      cc.byCause.map(c => `<span class="badge warn">${esc(c.cause)} · ${c.notes} 条错卷 · 第 ${c.questions.join('、')} 题</span>`).join(' ') + `</p>`;
+  } else {
+    html += `<p class="muted">这次没记典型错卷，错因分布要等老师在第 2 步记了错卷才有；下面是错得最多的 3 道题。</p>`;
   }
+  html += `<p>错得最多的 3 道题：${cc.topStuck.length ? cc.topStuck.map(t => `第 ${t.qid} 题 ${t.nMiss} 人错${t.cause ? '（' + esc(t.cause) + '为主）' : ''}`).join('、') : '没有错题。'}</p>`;
+  html += `<h4>临界生提醒</h4><p class="muted">及格线是总分 ${bl.full} 分的 60%，也就是 ${bl.line} 分；总分按表中各题得分相加，空白按缺考不计分。</p>`;
+  if (bl.borderline.length) {
+    html += `<p><b>${bl.borderline.length} 人距及格线 3 分以内：</b>${bl.borderline.map(b => `<span class="badge warn">${esc(b.sid)} · ${b.total} 分 · 差 ${b.gap} 分</span>`).join(' ')}</p>`;
+  } else {
+    html += `<p>这次没有距及格线 3 分以内的学生。</p>`;
+  }
+  html += `<p class="muted">及格线以下一共 ${bl.belowLine} 人（${bl.nStudents} 名学生里）。</p>`;
+  html += `<h3>学生分组（按最弱知识点掌握度）</h3><div id="groupOut"></div></div>`;
   document.getElementById('diagOut').innerHTML = html;
   renderGroups();
   attachDiagnosisSummary();
@@ -4617,24 +5433,78 @@ function nextCoverItems(main) {
     .sort((a, b) => (a.r - b.r) || (a.i - b.i))
     .slice(0, 5).map(x => x.e);
 }
-function buildOutline() {
+function buildOutline(cut) {
   const { mastery, testedN, testedC, missQ, order } = diagnosis;
   // 重点讲：考到 3 人次以上，且本次得分率 < 0.6。得分率是直接证据——掌握度是
   // 先验和平滑拉过的估计：彩排卷上三角函数得分率 0.51/0.54，掌握度却有
   // 0.65/0.66（被先验拉高，没进提纲）；等差数列得分率 0.69，掌握度 0.599…
   // 刚好压线（进了提纲）。按得分率取，提纲跟老师在统计页、诊断页看到的数
   // 一致。0.6 这条线不变，只是从掌握度挪到了得分率上。
+  // B3.3：阈值可调——cut 没传时用老师存下来的 outlineCut（默认就是上面
+  // 这条规则）；按掌握度取时，同一条线挪到掌握度上。
+  const c = (cut && isValidOutlineCut(cut.mode, cut.value)) ? cut : outlineCut;
   const rate = s => testedN[s] ? testedC[s] / testedN[s] : null;
-  const main = order.filter(s => testedN[s] >= 3 && rate(s) < 0.6);
+  const below = s => c.mode === 'mastery' ? mastery[s] < c.value : rate(s) < c.value;
+  const main = order.filter(s => testedN[s] >= 3 && below(s));
   const next = nextCoverItems(main);
   let items = [];
   main.forEach(s => items.push({ s, kind: '讲', mastery: mastery[s] }));
   next.forEach(e => items.push({ s: null, kind: '下次覆盖', mastery: null, bankId: e.id, bankName: e.name }));
   return items;
 }
+// ---------- B3.3：重点讲阈值（提纲页可调，调完重算 + 前后对比） ----------
+// 阈值存在浏览器本地，刷新还在；改完提纲按新阈值重算，版本号 +1、记进审计，
+// 和默认阈值（本次得分率 < 0.6）比多讲 / 少讲了哪几条，当场列出来。
+function setOutlineCut(mode, value) {
+  const v = +value;
+  if (!isValidOutlineCut(mode, v)) { toast('阈值不对：按得分率或掌握度取，数值在 0.3–0.9 之间。'); return false; }
+  const prev = { ...outlineCut };
+  if (mode === prev.mode && v === prev.value) return true;
+  outlineCut = { mode, value: v };
+  saveOutlineCut();
+  window._outline = buildOutline();
+  deletedItems = [];
+  bumpOutlineVersion(`调重点讲阈值（${outlineCutLabel(prev)} → ${outlineCutLabel(outlineCut)}）重算提纲`);
+  renderOutline();
+  return true;
+}
+function resetOutlineCut() {
+  if (outlineCut.mode === DEFAULT_OUTLINE_CUT.mode && outlineCut.value === DEFAULT_OUTLINE_CUT.value) return true;
+  return setOutlineCut(DEFAULT_OUTLINE_CUT.mode, DEFAULT_OUTLINE_CUT.value);
+}
+function applyOutlineCutFromForm() {
+  const mode = (document.getElementById('outlineCutMode') || {}).value || 'rate';
+  const value = (document.getElementById('outlineCutValue') || {}).value;
+  return setOutlineCut(mode, value);
+}
+window.setOutlineCut = setOutlineCut;
+window.resetOutlineCut = resetOutlineCut;
+window.applyOutlineCutFromForm = applyOutlineCutFromForm;
+function outlineCutHtml() {
+  const isDefault = outlineCut.mode === DEFAULT_OUTLINE_CUT.mode && outlineCut.value === DEFAULT_OUTLINE_CUT.value;
+  let html = `<div class="cut-box"><h3>重点讲阈值</h3><p class="muted">现在按${outlineCutLabel(outlineCut)}取重点讲。改完提纲马上重算，下面列出和默认（${outlineCutLabel(DEFAULT_OUTLINE_CUT)}）比多讲 / 少讲了哪几条。</p>` +
+    `<p><label>按 <select id="outlineCutMode" aria-label="重点讲阈值按什么取"><option value="rate"${outlineCut.mode === 'rate' ? ' selected' : ''}>本次得分率</option><option value="mastery"${outlineCut.mode === 'mastery' ? ' selected' : ''}>掌握度</option></select> &lt; <input type="number" id="outlineCutValue" min="0.3" max="0.9" step="0.05" value="${outlineCut.value}" style="width:80px" aria-label="重点讲阈值数值"> </label> ` +
+    `<button class="small secondary" onclick="applyOutlineCutFromForm()">重算提纲</button> ` +
+    `<button class="small ghost" onclick="resetOutlineCut()">恢复默认</button></p>`;
+  if (!isDefault && diagnosis) {
+    const defItems = buildOutline(DEFAULT_OUTLINE_CUT);
+    const cur = window._outline || [];
+    const diff = outlineFocusDiff(defItems, cur, diagnosis);
+    const nDef = defItems.filter(i => i.kind === '讲').length;
+    const nCur = cur.filter(i => i.kind === '讲').length;
+    html += `<div id="outlineCutDiff"><p><b>和默认比：</b>默认（${outlineCutLabel(DEFAULT_OUTLINE_CUT)}）重点讲 ${nDef} 条，现在（${outlineCutLabel(outlineCut)}）重点讲 ${nCur} 条。` +
+      (diff.added.length ? `<br>多讲：${diff.added.map(esc).join('；')}。` : '<br>多讲：无。') +
+      (diff.removed.length ? `<br>少讲：${diff.removed.map(esc).join('；')}。` : '<br>少讲：无。') + '</p></div>';
+  }
+  html += '</div>';
+  return html;
+}
 function renderOutline() {
   const items = window._outline;
-  let html = `<p class="muted">提纲第 ${outlineVersion} 版 · 改动自动保存：按住拖动调顺序，点“上移 / 下移”也行；删掉的在下面能恢复；旧版点开能查。</p>`;
+  let html = outlineCutHtml();
+  // B5：提纲页原则文案——提纲是草稿，老师说了算；来源都写着，能回原数据。
+  html += `<p class="trust-note">提纲是机器拟的草稿，老师说了算：顺序能拖、条目能删能改，改完版本号 +1、旧版留着能查；每条的来源都写着，点一下回到原数据。</p>`;
+  html += `<p class="muted">提纲第 ${outlineVersion} 版 · 改动自动保存：按住拖动调顺序，点“上移 / 下移”也行；删掉的在下面能恢复；旧版点开能查。</p>`;
   if (!items.length) html += '<p class="muted">本次考试没有掌握度偏低的知识点，讲评可按错题顺序进行。</p>';
   items.forEach((it, idx) => {
     const s = it.s;
@@ -4648,6 +5518,13 @@ function renderOutline() {
     // 典型错卷进提纲：重点讲的题下面多一行典型错法和错因，老师照着讲。
     const cjLines = cuojuanLinesForQuestions(topQEntries.map(([q]) => q));
     const cjHtml = cjLines.length ? cjLines.map(l => `<p class="muted">${l}</p>`).join('') : '';
+    // B4.4：提纲每条写清来源，点开能回原数据（按知识点层 / 按题层）。
+    const src = outlineSource(it, diagnosis);
+    const srcBtns = [];
+    if (hasSlot) srcBtns.push(`<button class="small ghost" onclick="goToReportSource('kc', ${src.slot})">回按知识点层</button>`);
+    else srcBtns.push(`<button class="small ghost" onclick="goToReportSource('kc', null)">回按知识点层</button>`);
+    if (src.topQ !== null && src.topQ !== undefined) srcBtns.push(`<button class="small ghost" onclick="goToReportSource('question', ${src.topQ})">回按题层（第 ${src.topQ} 题）</button>`);
+    const srcHtml = `<p class="muted">来源：${esc(src.text)} ${srcBtns.join(' ')}</p>`;
     html += `<div class="outline-item" draggable="true" data-idx="${idx}" ondragstart="event.dataTransfer.setData('text/plain', ${idx}); window._dragIdx = ${idx};" ondragover="event.preventDefault();" ondrop="event.preventDefault(); reorderOutline(window._dragIdx, ${idx});">
       <div class="oi-head"><h4${it.kind === '讲' ? ' class="mark-weak"' : ''}><span class="drag-handle" title="按住拖动调整顺序">⋮⋮</span>${idx + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${outlineLabel(it)}知识点</h4>
       <span class="rowbtns"><button class="small ghost" onclick="moveItem(${idx},-1)">上移</button>
@@ -4656,6 +5533,7 @@ function renderOutline() {
       <p><span class="badge ${it.kind === '讲' ? 'warn' : 'inf'}">${it.kind === '讲' ? '重点讲' : '下次覆盖'}</span> <span class="badge ${it.mastery !== null && it.mastery !== undefined && it.mastery < 0.5 ? 'warn' : 'inf'}">${outlineMasteryText(it)}</span> · ${acc}</p>
       <p>错题示例：${topQ}</p>
       ${cjHtml}
+      ${srcHtml}
       <p class="muted">${it.kind === '讲' ? '建议：先讲概念，再讲错题，最后变式练一道。' : '建议：这次先不讲，下次考试出题覆盖这个知识点。'}</p>
     </div>`;
   });
@@ -4689,8 +5567,10 @@ function showOutlineStep() {
   deletedItems = [];
   renderOutline();
   attachOutlineSnapshot();
-  show('stage5'); setStep(5);
+  maxStep = 5;   // UX-1：样例卡直接跳提纲时，第 2–4 步的数据已算出，步骤条上都能点回去看
+  goToStep(5);
   saveDraft();
+  toast('提纲已生成。');
   return true;
 }
 document.getElementById('toStage5').addEventListener('click', () => {
@@ -4723,7 +5603,7 @@ function buildOutlineMd() {
     const s = it.s, d = diagnosis;
     const topQEntries = (s === null || s === undefined) ? [] : Object.entries(d.missQ[s] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
     const topQ = topQEntries.map(([q, n]) => `第 ${q} 题（${n} 人错）`).join('、') || '本次考试未直接考到';
-    md += `${i + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${outlineLabel(it)}知识点（${outlineMasteryText(it)}）\n   错题示例：${topQ}\n`;
+    md += `${i + 1}. ${it.kind === '讲' ? '重点讲' : '下次考试覆盖'}：${outlineLabel(it)}知识点（${outlineMasteryText(it)}）\n   错题示例：${topQ}\n   来源：${outlineSource(it, diagnosis).text}\n`;
     cuojuanNotesForQuestions(topQEntries.map(([q]) => q)).forEach(n => {
       md += `   第 ${n.qid} 题典型错法：${n.typical}；错因：${n.cause || '未归类（待确认）'}\n`;
     });
@@ -4746,6 +5626,7 @@ function buildExportItems() {
     // 所以按编号查库不会串库。导出文案要和提纲页一致（“92 号 · 一次函数应用知识点”）。
     const skillName = it.bankName || (kc ? kc.name : kcNameById(skill));
     return { kind: it.kind, skill, skillName, mastery: it.mastery, acc: (hasSlot && d.testedN[s]) ? d.testedC[s] / d.testedN[s] : null, topQ,
+      source: outlineSource(it, d).text,
       cuojuan: cuojuanNotesForQuestions(topQEntries.map(([q]) => q)).map(n => ({ q: n.qid, typical: n.typical, cause: n.cause || '' })) };
   });
 }
@@ -4763,6 +5644,7 @@ function docxPreviewHtml(items) {
       `<p>${it.mastery === null || it.mastery === undefined ? '本次未考' : '掌握度：' + it.mastery.toFixed(2)}</p><p>班级得分率：${it.acc === null || it.acc === undefined ? '本次考试未考' : Math.round(it.acc * 100) + '%'}</p>` +
       `<p>错题示例：${esc(it.topQ || '本次考试未直接考到')}</p>` +
       (it.cuojuan || []).map(n => `<p class="muted">典型错法（第 ${n.q} 题）：${esc(n.typical || '')}；错因：${esc(n.cause || '未归类（待确认）')}</p>`).join('') +
+      (it.source ? `<p class="muted">来源：${esc(it.source)}</p>` : '') +
       `<p class="muted">${it.kind === '下次覆盖' ? '建议：这次先不讲，下次考试出题覆盖这个知识点。' : '建议：先讲概念，再讲错题，最后变式练一道。'}</p></div>`;
   });
   html += '<h5>下次考试覆盖</h5>';
@@ -4772,6 +5654,7 @@ function docxPreviewHtml(items) {
       `<p>${it.mastery === null || it.mastery === undefined ? '本次未考' : '掌握度：' + it.mastery.toFixed(2)}</p><p>班级得分率：${it.acc === null || it.acc === undefined ? '本次考试未考' : Math.round(it.acc * 100) + '%'}</p>` +
       `<p>错题示例：${esc(it.topQ || '本次考试未直接考到')}</p>` +
       (it.cuojuan || []).map(n => `<p class="muted">典型错法（第 ${n.q} 题）：${esc(n.typical || '')}；错因：${esc(n.cause || '未归类（待确认）')}</p>`).join('') +
+      (it.source ? `<p class="muted">来源：${esc(it.source)}</p>` : '') +
       `<p class="muted">建议：这次先不讲，下次考试出题覆盖这个知识点。</p></div>`;
   });
   return html;
@@ -4988,7 +5871,7 @@ function renderAdminPanel() {
   if (usersEl) {
     usersEl.innerHTML = users.length
       ? `<table><caption>老师账号</caption><thead><tr><th scope="col">邮箱</th><th scope="col">注册时间</th><th scope="col">状态</th><th scope="col">操作</th></tr></thead><tbody>` +
-        users.map(u => `<tr><td>${esc(u.email)}</td><td>${esc(new Date(u.createdAt).toLocaleString())}</td><td>${u.disabled ? '已停用' : '正常'}${u.mustChange ? ' · 待改密码' : ''}</td><td><button class="small ${u.disabled ? 'ghost' : 'danger'}" data-admin-toggle="${esc(u.email)}">${u.disabled ? '启用' : '停用'}</button> <button class="small ghost" data-admin-reset="${esc(u.email)}">重置密码</button></td></tr>`).join('') +
+        users.map(u => `<tr><td>${esc(u.email)}</td><td>${esc(fmtDateTime(new Date(u.createdAt)))}</td><td>${u.disabled ? '已停用' : '正常'}${u.mustChange ? ' · 待改密码' : ''}</td><td><button class="small ${u.disabled ? 'ghost' : 'danger'}" data-admin-toggle="${esc(u.email)}">${u.disabled ? '启用' : '停用'}</button> <button class="small ghost" data-admin-reset="${esc(u.email)}">重置密码</button></td></tr>`).join('') +
         '</tbody></table>'
       : '<p class="muted">还没有老师注册。</p>';
     usersEl.querySelectorAll('[data-admin-toggle]').forEach(b => b.addEventListener('click', () => {
@@ -5015,7 +5898,7 @@ function renderAdminPanel() {
   if (auditEl) {
     const recs = a.listAdminAudit();
     auditEl.innerHTML = recs.length
-      ? '<h3>恢复记录</h3><ul>' + recs.slice().reverse().map(r => `<li>${esc(new Date(r.at).toLocaleString())} ${esc(r.detail || '管理员密码已清除（恢复操作）')}</li>`).join('') + '</ul>'
+      ? '<h3>恢复记录</h3><ul>' + recs.slice().reverse().map(r => `<li>${esc(fmtDateTime(new Date(r.at)))} ${esc(r.detail || '管理员密码已清除（恢复操作）')}</li>`).join('') + '</ul>'
       : '<h3>恢复记录</h3><p class="muted">暂无恢复记录。</p>';
   }
 }
@@ -5152,6 +6035,7 @@ function preloadDemoIfFirstVisit() {
 }
 
 loadGroupCuts();
+loadOutlineCut();
 renderCuojuan();
 refreshCauseDropdowns();
 renderCauseSettings();
@@ -5160,15 +6044,37 @@ renderTemplateExample();
 wireDensityBtn('densityBtn3');
 wireDensityBtn('densityBtn4');
 setStep(1);
+// UX-1 步骤条可点回已完成步（没做过的步点不动），键盘回车/空格同样能跳；
+// 每步卡片底下的“直接去下一步”按钮（data-goto）回到下一页。
+document.getElementById('stepper').addEventListener('click', e => {
+  const st = e.target && e.target.closest ? e.target.closest('.step') : null;
+  if (!st) return;
+  const n = +st.dataset.s;
+  if (n <= maxStep) goToStep(n);
+});
+document.getElementById('stepper').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const st = e.target && e.target.closest ? e.target.closest('.step') : null;
+  if (!st) return;
+  if (e.preventDefault) e.preventDefault();
+  const n = +st.dataset.s;
+  if (n <= maxStep) goToStep(n);
+});
+document.querySelectorAll('[data-goto]').forEach(b => {
+  b.addEventListener('click', () => { goToStep(+b.dataset.goto); });
+});
 // 断点续做（A26）：打开页面时，有未做完的草稿就恢复到断的那一步；点“重新开始”清草稿重来。
 document.getElementById('resumeDiscardBtn').addEventListener('click', () => { clearDraft(); location.reload(); });
 restoreDraft();
 // B1 首页接线：英雄区按钮、样例卡按钮、首次访问预载示例。
 document.getElementById('heroUploadBtn').addEventListener('click', () => {
-  const s1 = document.getElementById('stage1');
-  if (s1) s1.scrollIntoView();
+  goToStep(1);   // UX-1：不管现在走到第几步，点“上传成绩表”都回到第 1 步
   const pb = document.getElementById('pasteBox');
   if (pb) pb.focus();
+});
+document.getElementById('navFuncLink').addEventListener('click', e => {
+  if (e.preventDefault) e.preventDefault();
+  goToStep(1);   // UX-1：导航“功能”回到第 1 步（分步呈现后第 1 步平时是收起的，锚点跳不过去）
 });
 document.getElementById('heroTemplateBtn').addEventListener('click', () => { downloadTemplate(); });
 document.getElementById('sampleViewBtn').addEventListener('click', () => {
